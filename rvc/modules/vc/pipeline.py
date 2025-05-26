@@ -4,6 +4,7 @@ import sys
 import traceback
 from functools import lru_cache
 from time import time as ttime
+from pathlib import Path
 
 import faiss
 import librosa
@@ -24,7 +25,12 @@ input_audio_path2wav = {}
 
 @lru_cache
 def cache_harvest_f0(input_audio_path, fs, f0max, f0min, frame_period):
-    audio = input_audio_path2wav[input_audio_path]
+    audio_path_str = str(input_audio_path) if isinstance(input_audio_path, Path) else input_audio_path
+    if audio_path_str not in input_audio_path2wav:
+        raise FileNotFoundError(f"Audio data for {audio_path_str} not found in cache for harvest.")
+
+    audio = input_audio_path2wav[audio_path_str]
+
     f0, t = pyworld.harvest(
         audio,
         fs=fs,
@@ -110,14 +116,16 @@ class Pipeline(object):
                     f0, [[pad_size, p_len - len(f0) - pad_size]], mode="constant"
                 )
         elif f0_method == "harvest":
-            input_audio_path2wav[input_audio_path] = x.astype(np.double)
+            audio_path_str_for_cache = str(input_audio_path) if isinstance(input_audio_path, Path) else input_audio_path
+            input_audio_path2wav[audio_path_str_for_cache] = x.astype(np.double)
+
             f0 = cache_harvest_f0(input_audio_path, self.sr, f0_max, f0_min, 10)
             if filter_radius > 2:
                 f0 = signal.medfilt(f0, 3)
         elif f0_method == "crepe":
             model = "full"
-            # Pick a batch size that doesn't cause memory errors on your gpu
-            batch_size = 512
+            # 最高品質のため大きなバッチサイズを使用
+            batch_size = int(os.getenv("RVC_CREPE_BATCH_SIZE", "1024"))
             # Compute pitch using first gpu
             audio = torch.tensor(np.copy(x))[None].float()
             f0, pd = torchcrepe.predict(
@@ -139,13 +147,17 @@ class Pipeline(object):
             if not hasattr(self, "model_rmvpe"):
                 from rvc.lib.rmvpe import RMVPE
 
-                logger.info(
-                    "Loading rmvpe model,%s" % "%s/rmvpe.pt" % os.environ["rmvpe_root"]
-                )
+                # DEBUG: 絶対パスで指定していた箇所を元に戻す (環境変数 rmvpe_root を使用)
+                rmvpe_root = os.getenv("rmvpe_root")
+                if not rmvpe_root or not os.path.exists(rmvpe_root):
+                    raise FileNotFoundError("rmvpe_root environment variable is not set or path does not exist.")
+                model_path = os.path.join(rmvpe_root, "rmvpe.pt")
+                if not os.path.exists(model_path):
+                    raise FileNotFoundError(f"RMVPE model not found at {model_path}. Check rmvpe_root and file existence.")
+                logger.info(f"Loading rmvpe model from: {model_path}")
+
                 self.model_rmvpe = RMVPE(
-                    "%s/rmvpe.pt" % os.environ["rmvpe_root"],
-                    is_half=self.is_half,
-                    device=self.device,
+                    model_path, is_half=self.is_half, device=self.device
                 )
             f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
 
@@ -228,7 +240,9 @@ class Pipeline(object):
             # _, I = index.search(npy, 1)
             # npy = big_npy[I.squeeze()]
 
-            score, ix = index.search(npy, k=8)
+            # 最高品質のため近傍数を増加（環境変数でオーバーライド可能）
+            k_neighbors = int(os.getenv("RVC_SEARCH_NEIGHBORS", "16"))
+            score, ix = index.search(npy, k=k_neighbors)
             weight = np.square(1 / score)
             weight /= weight.sum(axis=1, keepdims=True)
             npy = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
@@ -443,11 +457,10 @@ class Pipeline(object):
             audio_opt = librosa.resample(
                 audio_opt, orig_sr=tgt_sr, target_sr=resample_sr
             )
-        audio_max = np.abs(audio_opt).max() / 0.99
-        max_int16 = 32768
-        if audio_max > 1:
-            max_int16 /= audio_max
-        audio_opt = (audio_opt * max_int16).astype(np.int16)
+        # Normalize audio to prevent clipping
+        audio_max = np.abs(audio_opt).max()
+        if audio_max > 0.99:
+            audio_opt = audio_opt * 0.99 / audio_max
         del pitch, pitchf, sid
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

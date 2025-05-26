@@ -6,3 +6,25 @@ __pycache__/
 *$py.class
 
 .DS_Store
+
+# Claude settings
+.claude/
+
+# Build artifacts
+build/
+*.dmg
+
+# Generated files
+*_features.npy
+
+# Sample files
+samples/
+
+# Large model files
+model_dir/**/*.index
+model_dir/**/*.pth
+model_dir/**/*.pt
+model_dir/**/*.onnx
+
+# macOS application bundle
+Voice Converter.app/

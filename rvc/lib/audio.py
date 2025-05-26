@@ -1,70 +1,108 @@
+import logging
 import os
 import traceback
 from io import BytesIO
+from pathlib import Path
+from typing import Union
 
 import av
 import librosa
 import numpy as np
+import soundfile as sf
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
-def wav2(i, o, format):
-    inp = av.open(i, "rb")
-    if format == "m4a":
-        format = "mp4"
-    out = av.open(o, "wb", format=format)
-    if format == "ogg":
-        format = "libvorbis"
-    if format == "mp4":
-        format = "aac"
+def wav2(wav_in, wav_out, format):
+    if format == "flac":
+        av.AudioResampler(format="s16", layout="mono", rate=44100).resample(
+            av.open(wav_in, mode="r").decode("audio")
+        ).encode(wav_out, codec="flac", format="flac")
+    else:
+        av.AudioResampler(format="s16", layout="mono", rate=44100).resample(
+            av.open(wav_in, mode="r").decode("audio")
+        ).encode(wav_out, format=format)
 
-    ostream = out.add_stream(format)
 
+def audio2(audio_in, audio_out, target_format, target_sr):
+    logger.info("audio2: input %s, output %s", audio_in, audio_out)
+    inp = av.open(audio_in, "rb")
+    if target_format == "f32le":
+        out = av.open(audio_out, "wb", format="f32le")
+        ost = out.add_stream("pcm_f32le", rate=target_sr, layout="mono")
+    elif target_format == "s16le":
+        out = av.open(audio_out, "wb", format="s16le")
+        ost = out.add_stream("pcm_s16le", rate=target_sr, layout="mono")
+    else:
+        raise ValueError("Unknown target format")
     for frame in inp.decode(audio=0):
-        for p in ostream.encode(frame):
-            out.mux(p)
-
-    for p in ostream.encode(None):
-        out.mux(p)
-
-    out.close()
+        for p in ost.encode(frame):
+            out.write_packet(p)
     inp.close()
-
-
-def audio2(i, o, format, sr):
-    inp = av.open(i, "rb")
-    out = av.open(o, "wb", format=format)
-    if format == "ogg":
-        format = "libvorbis"
-    if format == "f32le":
-        format = "pcm_f32le"
-
-    ostream = out.add_stream(format, channels=1)
-    ostream.sample_rate = sr
-
-    for frame in inp.decode(audio=0):
-        for p in ostream.encode(frame):
-            out.mux(p)
-
     out.close()
-    inp.close()
 
 
-def load_audio(file, sr):
-    if not os.path.exists(file):
-        raise RuntimeError(
-            "You input a wrong audio path that does not exists, please fix it!"
-        )
+def load_audio(file: Union[str, Path], sr: int, to_mono: bool = False):
+    # file が文字列の場合、Pathオブジェクトに変換
+    if isinstance(file, str):
+        file_obj = Path(file)
+    elif isinstance(file, Path):
+        file_obj = file
+    else:
+        # 予期しない型の場合のエラー処理 (通常は Union[str, Path] なのでここには来ないはず)
+        logger.error(f"load_audio: Unexpected type for file argument: {type(file)}")
+        raise TypeError(f"Expected str or Path, got {type(file)}")
+
     try:
-        with open(file, "rb") as f:
-            with BytesIO() as out:
-                audio2(f, out, "f32le", sr)
-                return np.frombuffer(out.getvalue(), np.float32).flatten()
+        # https://github.com/librosa/librosa/issues/1015
+        # https://github.com/librosa/librosa/issues/1271
+        # if isinstance(file, (str, Path)): # Pathオブジェクトに統一したのでこのチェックは不要
+        if not file_obj.exists(): # Pathオブジェクトの exists() を使用
+            raise RuntimeError(
+                f"You input a wrong audio path that does not exist: {file_obj}"
+            )
+        audio_data, audio_sr = sf.read(file_obj, dtype="float32") # Pathオブジェクトを渡す
+        # else:
+            # audio_sr = file[0]
+            # audio_data = file[1]
+
+        if audio_data.ndim > 1 and to_mono:
+            audio_data = np.mean(audio_data, axis=1)
+        
+        if audio_data.ndim > 1 and not to_mono:
+            audio_data = audio_data[:, 0]
+
+        if audio_sr != sr:
+            audio_data = librosa.resample(audio_data, orig_sr=audio_sr, target_sr=sr)
+
+        return audio_data
 
     except AttributeError:
-        audio = file[1] / 32768.0
-        if len(audio.shape) == 2:
-            audio = np.mean(audio, -1)
-        return librosa.resample(audio, orig_sr=file[0], target_sr=16000)
+        logger.error(f"AttributeError in load_audio with file: {file}. This indicates an unexpected input type or structure.")
+        raise
 
-    except Exception:
-        raise RuntimeError(traceback.format_exc())
+    except Exception as e:
+        logger.error(f"Failed to load audio: {file}")
+        logger.error(traceback.format_exc())
+        raise e
+
+
+def load_audio_from_bytes(audio_bytes: bytes, sr: int, to_mono: bool = False):
+    try:
+        with BytesIO(audio_bytes) as bio:
+            audio_data, audio_sr = sf.read(bio, dtype="float32")
+
+        if audio_data.ndim > 1 and to_mono:
+            audio_data = np.mean(audio_data, axis=1)
+        
+        if audio_data.ndim > 1 and not to_mono:
+            audio_data = audio_data[:, 0]
+
+        if audio_sr != sr:
+            audio_data = librosa.resample(audio_data, orig_sr=audio_sr, target_sr=sr)
+
+        return audio_data
+    except Exception as e:
+        logger.error("Failed to load audio from bytes")
+        logger.error(traceback.format_exc())
+        raise e

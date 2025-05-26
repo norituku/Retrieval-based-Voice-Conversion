@@ -1,4 +1,5 @@
 import logging
+import os
 
 import librosa
 import numpy as np
@@ -10,7 +11,34 @@ logger = logging.getLogger(__name__)
 
 class ContentVec:
     def __init__(self, vec_path="pretrained/vec-768-layer-12.onnx", device=None):
-        logger.info("Load model(s) from {}".format(vec_path))
+        # vec_pathが相対パスの場合、複数の場所を試す
+        possible_paths = [
+            vec_path,
+            f"model_dir/{vec_path}",
+            f"assets/pretrained/{vec_path}",
+            f"pretrained/{vec_path}"
+        ]
+        
+        vec_path_found = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                vec_path_found = path
+                break
+        
+        if not vec_path_found:
+            # ファイル名のみでも検索
+            vec_filename = os.path.basename(vec_path)
+            search_dirs = [".", "model_dir", "assets", "pretrained", "assets/pretrained"]
+            for dir in search_dirs:
+                test_path = os.path.join(dir, vec_filename)
+                if os.path.exists(test_path):
+                    vec_path_found = test_path
+                    break
+        
+        if not vec_path_found:
+            raise FileNotFoundError(f"ContentVec model not found. Tried paths: {possible_paths}")
+        
+        logger.info("Load model(s) from {}".format(vec_path_found))
         if device == "cpu" or device is None:
             providers = ["CPUExecutionProvider"]
         elif device == "cuda":
@@ -19,7 +47,7 @@ class ContentVec:
             providers = ["DmlExecutionProvider"]
         else:
             raise RuntimeError("Unsportted Device")
-        self.model = onnxruntime.InferenceSession(vec_path, providers=providers)
+        self.model = onnxruntime.InferenceSession(vec_path_found, providers=providers)
 
     def __call__(self, wav):
         return self.forward(wav)
@@ -37,13 +65,13 @@ class ContentVec:
 
 def get_f0_predictor(f0_predictor, hop_length, sampling_rate, **kargs):
     if f0_predictor == "pm":
-        from lib.infer_pack.modules.F0Predictor.PMF0Predictor import PMF0Predictor
+        from rvc.lib.infer_pack.modules.F0Predictor.PMF0Predictor import PMF0Predictor
 
         f0_predictor_object = PMF0Predictor(
             hop_length=hop_length, sampling_rate=sampling_rate
         )
     elif f0_predictor == "harvest":
-        from lib.infer_pack.modules.F0Predictor.HarvestF0Predictor import (
+        from rvc.lib.infer_pack.modules.F0Predictor.HarvestF0Predictor import (
             HarvestF0Predictor,
         )
 
@@ -51,7 +79,7 @@ def get_f0_predictor(f0_predictor, hop_length, sampling_rate, **kargs):
             hop_length=hop_length, sampling_rate=sampling_rate
         )
     elif f0_predictor == "dio":
-        from lib.infer_pack.modules.F0Predictor.DioF0Predictor import DioF0Predictor
+        from rvc.lib.infer_pack.modules.F0Predictor.DioF0Predictor import DioF0Predictor
 
         f0_predictor_object = DioF0Predictor(
             hop_length=hop_length, sampling_rate=sampling_rate
@@ -70,7 +98,14 @@ class OnnxRVC:
         vec_path="vec-768-layer-12",
         device="cpu",
     ):
-        vec_path = f"pretrained/{vec_path}.onnx"
+        # vec_pathが.onnxで終わらない場合は追加
+        if not vec_path.endswith('.onnx'):
+            vec_path = f"{vec_path}.onnx"
+        
+        # pretrainedディレクトリが前にない場合は追加
+        if not vec_path.startswith('pretrained/') and not os.path.exists(vec_path):
+            vec_path = f"pretrained/{vec_path}"
+        
         self.vec_model = ContentVec(vec_path, device)
         if device == "cpu" or device is None:
             providers = ["CPUExecutionProvider"]

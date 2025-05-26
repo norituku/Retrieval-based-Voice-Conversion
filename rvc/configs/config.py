@@ -106,6 +106,24 @@ class Config:
         return hasattr(torch, "xpu") and torch.xpu.is_available()
 
     def params_config(self) -> tuple:
+        # カスタム設定ファイルをチェック
+        custom_config_env = os.getenv("RVC_CUSTOM_CONFIG")
+        if custom_config_env and os.path.exists(custom_config_env):
+            try:
+                with open(custom_config_env, 'r') as f:
+                    custom_config = json.load(f)
+                    if all(key in custom_config for key in ['x_pad', 'x_query', 'x_center', 'x_max']):
+                        logger.info(f"Using custom config from {custom_config_env}")
+                        return (
+                            custom_config['x_pad'],
+                            custom_config['x_query'],
+                            custom_config['x_center'],
+                            custom_config['x_max']
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to load custom config: {e}")
+        
+        # デフォルトの設定
         if self.gpu_mem is not None and self.gpu_mem <= 4:
             x_pad = 1
             x_query = 5
