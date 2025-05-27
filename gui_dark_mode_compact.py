@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """
-RVC Dark Mode GUI - 改善版（レイアウト最適化）
-ウィンドウサイズとスクロール機能を改善したバージョン
+RVC Dark Mode GUI - コンパクト版
+全ての要素をウィンドウ内に収めた最適化バージョン
 """
 import os
 import sys
-
-# macOS警告を抑制
-if sys.platform == "darwin":
-    os.environ['TK_SILENCE_DEPRECATION'] = '1'
-    os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
@@ -145,22 +139,11 @@ class DarkModeGUI:
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
         self.pitch_var = tk.IntVar(value=0)
-        
-        # gui_nuitka_standalone.pyと同じ品質パラメータ
-        self.quality_params = {
-            "f0method": "rmvpe+",
-            "index_rate": 0.88,
-            "filter_radius": 5,
-            "rms_mix_rate": 0.0,
-            "protect": 0.5
-        }
-        
-        # 互換性のために変数を維持
-        self.f0_method_var = tk.StringVar(value=self.quality_params["f0method"])
-        self.index_rate_var = tk.DoubleVar(value=self.quality_params["index_rate"])
-        self.filter_radius_var = tk.IntVar(value=self.quality_params["filter_radius"])
-        self.rms_mix_rate_var = tk.DoubleVar(value=self.quality_params["rms_mix_rate"])
-        self.protect_var = tk.DoubleVar(value=self.quality_params["protect"])
+        self.f0_method_var = tk.StringVar(value="rmvpe")  # 最高品質
+        self.index_rate_var = tk.DoubleVar(value=1.0)     # 最大インデックス使用
+        self.filter_radius_var = tk.IntVar(value=3)       # 推奨値
+        self.rms_mix_rate_var = tk.DoubleVar(value=0.25)  # 推奨値
+        self.protect_var = tk.DoubleVar(value=0.33)       # 推奨値
         
         # カスタムスタイル設定
         self.setup_styles()
@@ -688,14 +671,6 @@ class DarkModeGUI:
                                    fg=self.colors['text_secondary'],
                                    wraplength=400)
         self.status_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
-        
-        # ステージ情報
-        self.current_stage_label = tk.Label(self.status_card, 
-                                          text="",
-                                          font=('SF Pro Display', 11, 'bold'),
-                                          bg=self.colors['surface_card'],
-                                          fg=self.colors['text_primary'])
-        self.current_stage_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
     
     def create_log_section(self, parent):
         """ログセクション（コンパクト版）"""
@@ -754,9 +729,9 @@ class DarkModeGUI:
         total_progress = stage_progress + current_stage_progress
         
         # UIを更新
-        self.root.after(0, lambda: self._update_progress_ui(stage_index, total_progress, message))
+        self.root.after(0, lambda: self._update_progress_ui(total_progress, message))
         
-    def _update_progress_ui(self, stage_index, total_progress, message):
+    def _update_progress_ui(self, total_progress, message):
         """UIスレッドでプログレスを更新"""
         # ステータスカードを表示
         if not self.status_card.winfo_viewable():
@@ -766,20 +741,8 @@ class DarkModeGUI:
         self.progress['value'] = total_progress
         self.percentage_label.config(text=f"{int(total_progress)}%")
         
-        # 現在のステージ情報を更新
-        stage_names = [
-            "初期化中...",
-            "音声ファイルを読み込んでいます...",
-            "音声データの前処理を実行中...",
-            "音声の特徴を抽出しています...",
-            "AIモデルで音声を変換中...",
-            "音質の最適化を実行中...",
-            "変換結果を保存しています..."
-        ]
-        
-        if 0 <= stage_index < len(stage_names):
-            self.current_stage_label.config(text=stage_names[stage_index])
-            self.status_label.config(text=message)
+        # ステータステキストを更新
+        self.status_label.config(text=message)
         
         # UIを更新
         self.root.update_idletasks()
@@ -916,48 +879,32 @@ class DarkModeGUI:
         # モデルを検索（番号付きディレクトリまたは.pthファイル）
         models_found = []
         
-        # 番号付きディレクトリ内の.pthファイルを優先的に検索
+        # 番号付きディレクトリ内の.onnxファイルを検索
         for item in os.listdir(self.model_dir):
             item_path = os.path.join(self.model_dir, item)
             
             # 番号付きディレクトリの場合
             if os.path.isdir(item_path) and item.isdigit():
-                # ディレクトリ内の.pthファイルを検索
+                # ディレクトリ内の.onnxファイルを検索
                 for file in os.listdir(item_path):
-                    if file.endswith('.pth'):
+                    if file.endswith('.onnx'):
                         model_name = os.path.splitext(file)[0]
                         models_found.append({
                             'name': model_name,
                             'file': file,
                             'path': os.path.join(item_path, file),
-                            'dir': item,
-                            'type': 'pth'
+                            'dir': item
                         })
-                        break  # 各ディレクトリから最初の.pthファイルのみ
-                        
-                # .pthがない場合は.onnxを検索
-                if not any(m['dir'] == item for m in models_found):
-                    for file in os.listdir(item_path):
-                        if file.endswith('.onnx'):
-                            model_name = os.path.splitext(file)[0]
-                            models_found.append({
-                                'name': model_name,
-                                'file': file,
-                                'path': os.path.join(item_path, file),
-                                'dir': item,
-                                'type': 'onnx'
-                            })
-                            break
+                        break  # 各ディレクトリから最初の.onnxファイルのみ
             
-            # 直接配置された.pthファイルの場合（hubert_base.ptとrmvpe.ptは除外）
-            elif item.endswith('.pth') and item not in ['hubert_base.pt', 'rmvpe.pt']:
+            # 直接配置された.pthファイルの場合
+            elif item.endswith('.pth') and not item in ['hubert_base.pt', 'rmvpe.pt']:
                 model_name = os.path.splitext(item)[0]
                 models_found.append({
                     'name': model_name,
                     'file': item,
                     'path': item_path,
-                    'dir': None,
-                    'type': 'pth'
+                    'dir': None
                 })
                 
         if not models_found:
@@ -967,46 +914,30 @@ class DarkModeGUI:
             return
             
         # 各モデルのカードを作成
-        for model in sorted(models_found, key=lambda x: (x['dir'] if x['dir'] else 'z', x['name'])):
+        for model in sorted(models_found, key=lambda x: x['name']):
             model_name = model['name']
-            # ディレクトリがある場合は、ディレクトリ名を含めて表示
-            display_name = f"[{model['dir']}] {model_name}" if model['dir'] else model_name
-            
-            self.model_info[display_name] = {
+            self.model_info[model_name] = {
                 'file': model['file'],
                 'path': model['path'],
-                'dir': model['dir'],
-                'type': model['type'],
-                'name': model_name
+                'dir': model['dir']
             }
             
-            # params.jsonファイルを確認
+            # params.jsonファイルを確認（onnxモデルの場合）
             if model['dir']:
                 params_path = os.path.join(self.model_dir, model['dir'], 'params.json')
                 if os.path.exists(params_path):
-                    self.model_info[display_name]['params'] = params_path
-                    try:
-                        with open(params_path, 'r', encoding='utf-8') as f:
-                            params = json.load(f)
-                            # params.jsonから名前を取得できる場合は使用
-                            if 'name' in params:
-                                self.model_info[display_name]['display_name'] = params['name']
-                    except Exception as e:
-                        self.log_message(f"Failed to read params.json: {e}", "WARNING")
+                    self.model_info[model_name]['params'] = params_path
+                    self.log_message(f"Found params for {model_name}", "INFO")
             
-            # indexファイルを検索
-            if model['dir']:
-                model_dir_path = os.path.join(self.model_dir, model['dir'])
+            # indexファイルを検索（pthモデルの場合）
             else:
-                model_dir_path = self.model_dir
+                index_files = [f for f in os.listdir(self.model_dir) 
+                             if f.startswith(model_name) and f.endswith('.index')]
+                if index_files:
+                    self.model_info[model_name]['index'] = os.path.join(self.model_dir, index_files[0])
+                    self.log_message(f"Found index for {model_name}: {index_files[0]}", "INFO")
                 
-            index_files = [f for f in os.listdir(model_dir_path) 
-                         if f.endswith('.index') and model_name in f]
-            if index_files:
-                self.model_info[display_name]['index'] = os.path.join(model_dir_path, index_files[0])
-                self.log_message(f"Found index for {display_name}: {index_files[0]}", "INFO")
-                
-            self.create_model_card(display_name, display_name)
+            self.create_model_card(model_name, model_name)
             
         self.log_message(f"Loaded {len(models_found)} models", "INFO")
         
@@ -1171,155 +1102,125 @@ class DarkModeGUI:
         thread.start()
         
     def run_conversion(self):
-        """変換処理を実行（gui_nuitka_standalone.pyと同じ実装）"""
+        """変換処理を実行"""
         try:
-            # プログレス更新
-            self.update_progress(0, 10, "準備中...")
-            self.log_message("Starting conversion...", "INFO")
+            # UIの初期化
+            self.root.after(0, lambda: self.update_progress(0, 0, "初期化中..."))
+            self.log_message("Starting voice conversion...", "INFO")
             
             # モデル情報取得
             model_name = self.selected_model.get()
             model_info = self.model_info.get(model_name)
             
             if not model_info:
-                raise Exception("モデル情報が見つかりません")
+                raise ValueError(f"Model {model_name} not found")
                 
-            # 出力ファイルパス
+            # 出力ファイルパス生成
             input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"{input_name}_{model_name}_{timestamp}.wav"
             output_path = os.path.join(self.output_var.get(), output_filename)
             
-            # パス設定
-            if model_info.get('type') == 'pth' or model_info['file'].endswith('.pth'):
-                # PTHモデルの場合
-                if model_info.get('dir'):
-                    model_path = os.path.join(self.model_dir, model_info['dir'])
-                else:
-                    model_path = os.path.dirname(model_info['path'])
-                model_file = model_info['path']
+            # RVCコマンド構築
+            if USE_HARDCODED_PATH:
+                cmd = [POETRY_PYTHON_PATH, "-m", RVC_MODULE]
             else:
-                # ONNXモデルの場合
-                model_path = os.path.join(self.model_dir, model_info['dir'])
-                model_file = model_info['path']
-            
-            if not os.path.exists(model_file):
-                raise Exception(f"モデルファイルが見つかりません: {model_file}")
-            
-            # インデックスファイル
-            index_file = None
-            if model_info.get('index'):
-                index_file = model_info['index']
-            elif os.path.exists(model_path):
-                index_files = [f for f in os.listdir(model_path) if f.endswith('.index')]
-                if index_files:
-                    index_file = os.path.join(model_path, index_files[0])
-            
-            # Hubertモデル
-            hubert_path = os.path.join(self.model_dir, "hubert_base.pt")
-            if not os.path.exists(hubert_path):
-                self.log_message("Hubert model not found in model_dir", "WARNING")
+                cmd = ["python", "-m", "rvc_cli"]
                 
-            self.update_progress(1, 30, "音声を処理中...")
-            
-            # プロジェクトディレクトリ
-            project_dir = self.base_dir
-            if project_dir.endswith('/Resources'):
-                possible_dirs = [
-                    "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion",
-                    os.path.expanduser("~/Retrieval-based-Voice-Conversion"),
-                ]
-                for dir_path in possible_dirs:
-                    if os.path.exists(os.path.join(dir_path, "pyproject.toml")):
-                        project_dir = dir_path
-                        break
-                        
-            self.update_progress(2, 50, "変換を実行中...")
-            
-            # CLIコマンド構築
-            cmd = [
-                f'cd "{project_dir}"',
-                "&&",
-                "poetry", "run", "rvc", "infer",
-                "-m", f'"{model_file}"',
-                "-i", f'"{self.input_var.get()}"',
-                "-o", f'"{output_path}"',
-                "-fu", str(self.pitch_var.get()),
+            cmd.extend([
+                "infer",
+                "-m", model_info['path'],
+                "-i", self.input_var.get(),
+                "-o", output_path,
+                "-pit", str(self.pitch_var.get()),
                 "-fm", self.f0_method_var.get(),
                 "-ir", str(self.index_rate_var.get()),
                 "-fr", str(self.filter_radius_var.get()),
-                "-p", str(self.protect_var.get()),
-                "-rmr", str(self.rms_mix_rate_var.get())
-            ]
+                "-rms", str(self.rms_mix_rate_var.get()),
+                "-pro", str(self.protect_var.get())
+            ])
             
-            if index_file:
-                cmd.extend(["-if", f'"{index_file}"'])
+            # indexファイルがある場合
+            if model_info.get('index'):
+                cmd.extend(["-index", model_info['index']])
                 
-            if os.path.exists(hubert_path):
-                cmd.extend(["--hubert_model_path", f'"{hubert_path}"'])
+            self.log_message(f"Command: {' '.join(cmd)}", "DEBUG")
             
-            # 実行
-            shell_cmd = " ".join(cmd)
-            env = os.environ.copy()
-            env['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+            # プロセス実行
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
             
-            self.log_message(f"Running command: {shell_cmd}", "DEBUG")
-            self.update_progress(3, 70, "音声を変換中...")
+            # 出力を監視
+            stage_patterns = {
+                "Loading model": (1, "モデルを読み込んでいます"),
+                "Processing audio": (2, "音声を処理しています"),
+                "Extracting features": (3, "特徴を抽出しています"),
+                "Converting voice": (4, "音声を変換しています"),
+                "Post-processing": (5, "後処理を実行しています"),
+                "Saving output": (6, "ファイルを保存しています")
+            }
             
-            # プロセスを実行して進捗を監視
-            self.run_and_monitor_inference(shell_cmd, output_filename, env)
+            current_stage = 0
             
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                    
+                if line:
+                    line = line.strip()
+                    self.log_message(line, "PROCESS")
+                    
+                    # ステージ検出
+                    for pattern, (stage, message) in stage_patterns.items():
+                        if pattern in line:
+                            current_stage = stage
+                            self.root.after(0, lambda s=stage, m=message: 
+                                          self.update_progress(s, 0, m))
+                            
+                    # プログレス検出
+                    if "%" in line:
+                        try:
+                            import re
+                            match = re.search(r'(\d+)%', line)
+                            if match:
+                                percent = int(match.group(1))
+                                self.root.after(0, lambda s=current_stage, p=percent: 
+                                              self.update_progress(s, p, line))
+                        except:
+                            pass
+                            
+            # プロセス完了待ち
+            return_code = process.wait()
+            
+            if return_code == 0:
+                self.root.after(0, lambda: self.update_progress(6, 100, "変換完了！"))
+                self.log_message(f"Conversion completed: {output_filename}", "SUCCESS")
+                self.root.after(0, lambda: messagebox.showinfo("Success", 
+                    f"Voice conversion completed!\n\nOutput: {output_filename}"))
+            else:
+                stderr = process.stderr.read()
+                raise RuntimeError(f"Conversion failed with code {return_code}\n{stderr}")
+                
         except Exception as e:
-            error_msg = str(e)
-            self.log_message(f"Conversion failed: {error_msg}", "ERROR")
-            self.root.after(0, lambda msg=error_msg: messagebox.showerror("Error", f"Conversion failed:\n{msg}"))
+            self.log_message(f"Error: {str(e)}", "ERROR")
+            self.root.after(0, lambda: messagebox.showerror("Error", 
+                f"Conversion failed:\n{str(e)}"))
         finally:
             # UIをリセット
             self.root.after(1000, lambda: self.reset_ui())
             
-    def run_and_monitor_inference(self, shell_cmd, output_filename, env):
-        """推論プロセスを実行して監視（gui_nuitka_standalone.pyと同じ実装）"""
-        result = subprocess.run(
-            shell_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            env=env
-        )
-        
-        self.update_progress(4, 90, "最終処理中...")
-        
-        # 出力パスを取得
-        output_path = os.path.join(self.output_var.get(), output_filename)
-        
-        # 結果確認
-        if result.returncode == 0 and os.path.exists(output_path):
-            self.update_progress(6, 100, "完了！")
-            self.log_message(f"Conversion completed: {output_filename}", "SUCCESS")
-            
-            # 成功メッセージ
-            self.root.after(0, lambda: messagebox.showinfo("Success", 
-                f"Voice conversion completed!\n\nOutput: {output_filename}"))
-                
-            # macOSの場合、Finderで表示するか確認
-            if sys.platform == "darwin":
-                result_open = messagebox.askyesno(
-                    "Open File",
-                    "Would you like to open the output file in Finder?"
-                )
-                if result_open:
-                    subprocess.run(["open", "-R", output_path])
-        else:
-            error_msg = result.stderr if result.stderr else "変換に失敗しました"
-            self.log_message(f"Conversion failed: {error_msg}", "ERROR")
-            raise Exception(error_msg)
-    
     def reset_ui(self):
         """UIをリセット"""
         self.progress['value'] = 0
         self.percentage_label.config(text="0%")
         self.status_label.config(text="")
-        self.current_stage_label.config(text="")
         # ステータスカードを非表示にする
         self.status_card.pack_forget()
 
