@@ -321,6 +321,45 @@ class DarkModeGUI:
         )
         self.output_selector.pack(fill=tk.X)
         
+        # 出力ファイル名設定
+        filename_frame = tk.Frame(left_column, bg=self.colors['surface_card'])
+        filename_frame.pack(fill=tk.X, pady=(self.design_tokens.spacing['sm'], 0))
+        
+        filename_label = tk.Label(
+            filename_frame, 
+            text="Output Filename (optional)",
+            font=('SF Pro Display', 10, 'bold'),
+            bg=self.colors['surface_card'],
+            fg=self.colors['text_secondary']
+        )
+        filename_label.pack(anchor='w')
+        
+        # ファイル名入力フィールド
+        self.filename_entry = tk.Entry(
+            filename_frame,
+            textvariable=self.output_filename_var,
+            font=('SF Pro Mono', 10),
+            bg=self.colors['background_secondary'],
+            fg=self.colors['text_primary'],
+            insertbackground=self.colors['text_primary'],
+            relief=tk.FLAT,
+            bd=1
+        )
+        self.filename_entry.pack(fill=tk.X, pady=(2, 0))
+        
+        # プレースホルダー風の説明
+        placeholder_label = tk.Label(
+            filename_frame,
+            text="Leave empty for auto-generated name",
+            font=('SF Pro Display', 8),
+            bg=self.colors['surface_card'],
+            fg=self.colors['text_disabled']
+        )
+        placeholder_label.pack(anchor='w', pady=(1, 0))
+        
+        # バリデーション用にトレース
+        self.output_filename_var.trace('w', self.validate_filename)
+        
         # 出力ファイル名プレビュー
         self.output_preview_label = tk.Label(
             left_column,
@@ -329,7 +368,7 @@ class DarkModeGUI:
             bg=self.colors['surface_card'],
             fg=self.colors['text_tertiary']
         )
-        self.output_preview_label.pack(anchor='w', pady=(2, 0))
+        self.output_preview_label.pack(anchor='w', pady=(4, 0))
         
         # 右カラム：ピッチ設定
         right_column = tk.Frame(grid_container, bg=self.colors['surface_card'])
@@ -509,6 +548,23 @@ class DarkModeGUI:
         
         variable.trace('w', update_value_label)
         
+    def validate_filename(self, *args):
+        """ファイル名のバリデーション"""
+        filename = self.output_filename_var.get()
+        
+        # 不正な文字をチェック
+        invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+        has_invalid = any(char in filename for char in invalid_chars)
+        
+        # エントリの色を変更してバリデーション結果を表示
+        if has_invalid:
+            self.filename_entry.config(bg='#4A2C2A')  # 薄い赤色
+        else:
+            self.filename_entry.config(bg=self.colors['background_secondary'])
+            
+        # プレビューを更新
+        self.update_output_preview()
+        
     def on_model_selected(self, model_name):
         """モデル選択時の処理"""
         self.selected_model.set(model_name)
@@ -540,15 +596,33 @@ class DarkModeGUI:
             try:
                 selected_model = self.model_selector.get_selected_model()
                 if selected_model:
-                    preview_filename = self.rvc_manager.generate_output_filename(
-                        self.input_var.get(),
-                        selected_model['name'],
-                        self.output_filename_var.get() or None
-                    )
-                    self.output_preview_label.config(
-                        text=f"Output: {preview_filename}",
-                        fg=self.colors['text_primary']
-                    )
+                    # カスタムファイル名の検証
+                    custom_filename = self.output_filename_var.get().strip()
+                    invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+                    has_invalid = any(char in custom_filename for char in invalid_chars) if custom_filename else False
+                    
+                    if has_invalid:
+                        self.output_preview_label.config(
+                            text=f"❌ Invalid characters: {custom_filename}.wav",
+                            fg=self.colors['error']
+                        )
+                    else:
+                        preview_filename = self.rvc_manager.generate_output_filename(
+                            self.input_var.get(),
+                            selected_model['name'],
+                            custom_filename or None
+                        )
+                        
+                        if custom_filename:
+                            self.output_preview_label.config(
+                                text=f"✓ Custom: {preview_filename}",
+                                fg=self.colors['success']
+                            )
+                        else:
+                            self.output_preview_label.config(
+                                text=f"Auto: {preview_filename}",
+                                fg=self.colors['text_primary']
+                            )
                 else:
                     self.output_preview_label.config(
                         text="[Select model first]",
@@ -576,6 +650,16 @@ class DarkModeGUI:
         if not selected_model:
             messagebox.showwarning("Warning", "Please select a voice model.")
             return
+            
+        # カスタムファイル名のバリデーション
+        custom_filename = self.output_filename_var.get().strip()
+        if custom_filename:
+            invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+            if any(char in custom_filename for char in invalid_chars):
+                messagebox.showerror("Error", 
+                    f"Invalid characters in filename: {', '.join(invalid_chars)}\n"
+                    "Please remove these characters from the output filename.")
+                return
             
         # 出力ディレクトリ作成
         os.makedirs(self.output_var.get(), exist_ok=True)
