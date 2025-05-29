@@ -90,18 +90,18 @@ class DarkModeGUI:
                 'caption2': {'size': 9, 'weight': 'normal'},
             },
             
-            # スペーシング - よりコンパクトな2ptグリッドシステム
+            # スペーシング - 超コンパクトグリッドシステム
             'spacing': {
                 'xxxs': 1,
                 'xxs': 2,
-                'xs': 4,
-                'sm': 6,
-                'md': 8,
-                'lg': 10,
-                'xl': 12,
-                'xxl': 16,
-                'xxxl': 20,
-                'xxxxl': 24,
+                'xs': 3,
+                'sm': 4,
+                'md': 5,
+                'lg': 6,
+                'xl': 8,
+                'xxl': 10,
+                'xxxl': 12,
+                'xxxxl': 16,
             },
             
             # コーナー半径
@@ -114,13 +114,13 @@ class DarkModeGUI:
                 'round': 999,
             },
             
-            # レイアウト（より柔軟に）
+            # レイアウト（コンパクト設定）
             'layout': {
-                'sidebar_width': 240,
-                'min_window_width': 1000,
-                'min_window_height': 600,
-                'toolbar_height': 40,
-                'max_content_width': 700,  # メインコンテンツの最大幅
+                'sidebar_width': 200,
+                'min_window_width': 900,
+                'min_window_height': 500,
+                'toolbar_height': 35,
+                'max_content_width': 650,  # メインコンテンツの最大幅
             }
         }
         
@@ -132,18 +132,22 @@ class DarkModeGUI:
             'mono': 'SF Mono'
         }
         
-        # アプリケーション設定（高品質設定で固定）
-        self.setup_app_directories()
+        # 変数の初期化（setup_app_directories()より前に実行）
         self.model_info = {}
         self.selected_model = tk.StringVar()
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
+        self.output_filename_var = tk.StringVar()  # 出力ファイル名用の変数
+        self.model_dir_var = tk.StringVar()  # モデルディレクトリ用の変数
         self.pitch_var = tk.IntVar(value=0)
         self.f0_method_var = tk.StringVar(value="rmvpe")  # 最高品質
         self.index_rate_var = tk.DoubleVar(value=1.0)     # 最大インデックス使用
         self.filter_radius_var = tk.IntVar(value=3)       # 推奨値
         self.rms_mix_rate_var = tk.DoubleVar(value=0.25)  # 推奨値
         self.protect_var = tk.DoubleVar(value=0.33)       # 推奨値
+        
+        # アプリケーション設定
+        self.setup_app_directories()
         
         # カスタムスタイル設定
         self.setup_styles()
@@ -168,8 +172,38 @@ class DarkModeGUI:
         else:
             self.base_dir = os.path.dirname(os.path.abspath(__file__))
             
-        self.model_dir = os.path.join(self.base_dir, "model_dir")
+        # 設定ファイルの読み込み
+        self.settings_file = os.path.join(self.base_dir, "gui_settings.json")
+        self.load_settings()
+        
+        # デフォルトのモデルディレクトリ
+        default_model_dir = os.path.join(self.base_dir, "model_dir")
+        if not self.model_dir_var.get():
+            self.model_dir_var.set(default_model_dir)
+            
+        self.model_dir = self.model_dir_var.get()
         self.config_dir = os.path.join(self.base_dir, "configs")
+        
+    def load_settings(self):
+        """設定ファイルの読み込み"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    self.model_dir_var.set(settings.get('model_directory', ''))
+        except Exception as e:
+            print(f"Settings load error: {e}")
+            
+    def save_settings(self):
+        """設定ファイルの保存"""
+        try:
+            settings = {
+                'model_directory': self.model_dir_var.get()
+            }
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Settings save error: {e}")
         
     def setup_styles(self):
         """カスタムttkスタイルの設定"""
@@ -264,14 +298,14 @@ class DarkModeGUI:
         
         # ウィンドウサイズを画面サイズに応じて調整
         window_width = min(self.design_tokens['layout']['min_window_width'], int(screen_width * 0.9))
-        window_height = min(self.design_tokens['layout']['min_window_height'], int(screen_height * 0.85))
+        window_height = min(650, int(screen_height * 0.85))  # デフォルト高さを650に設定
         
         # 画面中央に配置
         x = (screen_width - window_width) // 2
         y = (screen_height - window_height) // 2
         
         self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        self.root.minsize(900, 550)  # 最小サイズをさらに小さく設定
+        self.root.minsize(850, 480)  # 最小サイズをさらに小さく設定
         
         # macOS用の設定
         if sys.platform == "darwin":
@@ -370,10 +404,28 @@ class DarkModeGUI:
         header.pack(fill=tk.X, padx=self.design_tokens['spacing']['sm'], 
                    pady=self.design_tokens['spacing']['sm'])
         
-        tk.Label(header, text="Voice Models",
+        # タイトルと設定ボタンの行
+        title_row = tk.Frame(header, bg=self.colors['surface_sidebar'])
+        title_row.pack(fill=tk.X)
+        
+        tk.Label(title_row, text="Voice Models",
                 font=('SF Pro Display', 16, 'bold'),
                 bg=self.colors['surface_sidebar'],
-                fg=self.colors['text_primary']).pack(anchor='w')
+                fg=self.colors['text_primary']).pack(side=tk.LEFT)
+        
+        # 設定ボタン
+        settings_btn = self.create_button(title_row, "⚙", 
+                                        self.open_model_settings, 
+                                        style='Secondary')
+        settings_btn.pack(side=tk.RIGHT)
+        
+        # モデルフォルダパス表示
+        path_label = tk.Label(header, 
+                            text=self.truncate_path(self.model_dir_var.get(), 30),
+                            font=('SF Pro Mono', 9),
+                            bg=self.colors['surface_sidebar'],
+                            fg=self.colors['text_tertiary'])
+        path_label.pack(anchor='w', pady=(2, 0))
         
         tk.Label(header, text="Select a model",
                 font=('SF Pro Display', 11),
@@ -474,9 +526,9 @@ class DarkModeGUI:
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         
-        # メインコンテンツコンテナ（コンパクトなパディング）
+        # メインコンテンツコンテナ（超コンパクトなパディング）
         content_container = tk.Frame(self.scrollable_frame, bg=self.colors['background_primary'])
-        content_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        content_container.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
         
         # タイトルセクション
         self.create_title_section(content_container)
@@ -487,117 +539,208 @@ class DarkModeGUI:
         # 設定セクション
         self.create_settings_section(content_container)
         
-        # 変換ボタン
-        self.create_conversion_button(content_container)
-        
         # ステータスセクション
         self.create_status_section(content_container)
         
     def create_title_section(self, parent):
-        """タイトルセクション"""
+        """タイトルセクション（コンパクト）"""
         title_frame = tk.Frame(parent, bg=self.colors['background_primary'])
-        title_frame.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['lg']))
+        title_frame.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xs']))
         
-        tk.Label(title_frame, text="Voice Converter",
-                font=('SF Pro Display', 24, 'bold'),
+        # 1行にタイトルとサブタイトルを配置
+        tk.Label(title_frame, text="Voice Converter - AI Voice Conversion",
+                font=('SF Pro Display', 16, 'bold'),
                 bg=self.colors['background_primary'],
                 fg=self.colors['text_primary']).pack(anchor='center')
         
-        tk.Label(title_frame, text="High-Quality AI Voice Conversion",
-                font=('SF Pro Display', 12),
-                bg=self.colors['background_primary'],
-                fg=self.colors['text_secondary']).pack(anchor='center', pady=(2, 0))
-        
     def create_input_section(self, parent):
-        """入力セクション"""
+        """入力セクション（横並び配置）"""
         # カードコンテナ
-        input_card = self.create_card(parent, "Input Audio")
+        input_card = self.create_card(parent, "Input & Convert")
         
-        # ファイル選択ボタン
-        button_frame = tk.Frame(input_card, bg=self.colors['surface_card'])
-        button_frame.pack(fill=tk.X)
+        # 横並びレイアウト
+        horizontal_layout = tk.Frame(input_card, bg=self.colors['surface_card'])
+        horizontal_layout.pack(fill=tk.X)
         
-        browse_btn = self.create_button(button_frame, "Choose Audio File", 
+        # 左側：ファイル選択
+        left_section = tk.Frame(horizontal_layout, bg=self.colors['surface_card'])
+        left_section.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, self.design_tokens['spacing']['xs']))
+        
+        browse_btn = self.create_button(left_section, "Choose Audio File", 
                                        self.browse_input, 
-                                       style='Primary')
-        browse_btn.pack(anchor='w')
+                                       style='Secondary')
+        browse_btn.pack(fill=tk.X)
         
         # 選択されたファイル表示
-        self.file_info_frame = tk.Frame(input_card, bg=self.colors['surface_card'])
-        self.file_info_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['sm'], 0))
+        self.file_info_frame = tk.Frame(left_section, bg=self.colors['surface_card'])
+        self.file_info_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xs'], 0))
+        
+        # 右側：変換ボタン
+        right_section = tk.Frame(horizontal_layout, bg=self.colors['surface_card'])
+        right_section.pack(side=tk.RIGHT, padx=(self.design_tokens['spacing']['xs'], 0))
+        
+        # プライマリー変換ボタン
+        convert_btn = self.create_button(right_section, 
+                                       "Start\nConversion", 
+                                       self.start_conversion,
+                                       style='Primary',
+                                       width=120,
+                                       height=50)
+        convert_btn.pack()
         
     def create_settings_section(self, parent):
-        """設定セクション"""
+        """設定セクション（横並び配置）"""
         settings_card = self.create_card(parent, "Settings")
         
-        # 出力ディレクトリ設定
-        output_frame = tk.Frame(settings_card, bg=self.colors['surface_card'])
-        output_frame.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['sm']))
+        # 2カラムグリッドレイアウト
+        grid_container = tk.Frame(settings_card, bg=self.colors['surface_card'])
+        grid_container.pack(fill=tk.X)
         
-        # ラベル
-        output_label = tk.Label(output_frame, text="Output Directory",
-                               font=('SF Pro Display', 12, 'bold'),
+        # 左カラム：出力設定
+        left_column = tk.Frame(grid_container, bg=self.colors['surface_card'])
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, self.design_tokens['spacing']['xs']))
+        
+        # 出力ディレクトリ設定（コンパクト）
+        output_label = tk.Label(left_column, text="Output Directory",
+                               font=('SF Pro Display', 11, 'bold'),
                                bg=self.colors['surface_card'],
                                fg=self.colors['text_secondary'])
-        output_label.pack(anchor='w', pady=(0, self.design_tokens['spacing']['xs']))
+        output_label.pack(anchor='w')
         
-        # パス表示とブラウズボタンのコンテナ
-        path_container = tk.Frame(output_frame, bg=self.colors['surface_card'])
-        path_container.pack(fill=tk.X)
+        # パス表示とブラウズボタン（横並び）
+        path_container = tk.Frame(left_column, bg=self.colors['surface_card'])
+        path_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xxs'], 0))
         
-        # パス表示
+        # パス表示（小さく）
         self.output_path_frame = tk.Frame(path_container, 
                                          bg=self.colors['background_secondary'],
                                          relief='flat',
-                                         height=32)
+                                         height=28)
         self.output_path_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.output_path_frame.pack_propagate(False)
-        
-        path_inner = tk.Frame(self.output_path_frame, bg=self.colors['background_secondary'])
-        path_inner.place(relx=0, rely=0.5, anchor='w', x=8)
         
         # デフォルト出力パス
         default_output = os.path.join(os.path.expanduser("~"), "Desktop", "VoiceConverter_Output")
         self.output_var.set(default_output)
         
-        self.output_path_label = tk.Label(path_inner, 
-                                         text=self.truncate_path(self.output_var.get(), 50),
-                                         font=('SF Pro Mono', 11),
+        self.output_path_label = tk.Label(self.output_path_frame, 
+                                         text=self.truncate_path(self.output_var.get(), 35),
+                                         font=('SF Pro Mono', 9),
                                          bg=self.colors['background_secondary'],
                                          fg=self.colors['text_primary'],
                                          anchor='w')
-        self.output_path_label.pack(fill=tk.X)
+        self.output_path_label.place(relx=0.02, rely=0.5, anchor='w')
         
-        # ブラウズボタン
-        browse_output_btn = self.create_button(path_container, "Choose...", 
+        # ブラウズボタン（小さく）
+        browse_output_btn = self.create_button(path_container, "...", 
                                               self.browse_output, 
                                               style='Secondary')
-        browse_output_btn.pack(side=tk.RIGHT, padx=(self.design_tokens['spacing']['sm'], 0))
+        browse_output_btn.pack(side=tk.RIGHT, padx=(self.design_tokens['spacing']['xxs'], 0))
         
-        # 出力ファイル名プレビュー
-        preview_frame = tk.Frame(output_frame, bg=self.colors['surface_card'])
-        preview_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xs'], 0))
+        # 出力ファイル名設定
+        filename_label = tk.Label(left_column, text="Output Filename",
+                                font=('SF Pro Display', 10, 'bold'),
+                                bg=self.colors['surface_card'],
+                                fg=self.colors['text_secondary'])
+        filename_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
         
-        self.output_preview_label = tk.Label(preview_frame, 
-                                           text="[Select input file and model first]",
-                                           font=('SF Pro Mono', 10),
+        # ファイル名入力フィールド
+        filename_container = tk.Frame(left_column, bg=self.colors['surface_card'])
+        filename_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xxs'], 0))
+        
+        self.filename_entry = tk.Entry(filename_container,
+                                     textvariable=self.output_filename_var,
+                                     font=('SF Pro Mono', 9),
+                                     bg=self.colors['background_secondary'],
+                                     fg=self.colors['text_primary'],
+                                     relief='flat',
+                                     bd=1)
+        self.filename_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # ファイル名変更時のバリデーション
+        self.output_filename_var.trace('w', self.validate_filename)
+        
+        # 拡張子ラベル
+        ext_label = tk.Label(filename_container, text=".wav",
+                           font=('SF Pro Mono', 9),
+                           bg=self.colors['surface_card'],
+                           fg=self.colors['text_secondary'])
+        ext_label.pack(side=tk.RIGHT, padx=(self.design_tokens['spacing']['xxs'], 0))
+        
+        # 出力ファイル名プレビュー（1行）
+        self.output_preview_label = tk.Label(left_column, 
+                                           text="[Select input and model]",
+                                           font=('SF Pro Mono', 7),
                                            bg=self.colors['surface_card'],
                                            fg=self.colors['text_tertiary'])
-        self.output_preview_label.pack(anchor='w')
+        self.output_preview_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xxs'], 0))
         
-        # 区切り線
-        separator = tk.Frame(settings_card, 
-                           bg=self.colors['divider'], 
-                           height=1)
-        separator.pack(fill=tk.X, pady=self.design_tokens['spacing']['sm'])
+        # 右カラム：ピッチ設定
+        right_column = tk.Frame(grid_container, bg=self.colors['surface_card'])
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(self.design_tokens['spacing']['xs'], 0))
         
-        # ピッチ設定のみ
-        settings_container = tk.Frame(settings_card, bg=self.colors['surface_card'])
-        settings_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['sm'], 0))
-        
-        self.create_setting_control(settings_container, "Pitch Adjustment", self.pitch_var, 
-                                   -12, 12, 0, "semitones")
+        # ピッチ設定（コンパクト版）
+        self.create_compact_setting_control(right_column, "Pitch", self.pitch_var, 
+                                          -12, 12, "semitones")
 
+    def create_compact_setting_control(self, parent, label, variable, min_val, max_val, unit=""):
+        """コンパクトな設定コントロール作成"""
+        # ラベル
+        label_text = tk.Label(parent, text=f"{label} Adjustment",
+                            font=('SF Pro Display', 11, 'bold'),
+                            bg=self.colors['surface_card'],
+                            fg=self.colors['text_secondary'])
+        label_text.pack(anchor='w')
+        
+        # 値とスライダーを横並びに
+        control_frame = tk.Frame(parent, bg=self.colors['surface_card'])
+        control_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xxs'], 0))
+        
+        # 値表示（左側）
+        def format_value():
+            val = variable.get()
+            if isinstance(variable, tk.DoubleVar):
+                return f"{val:.2f}{unit}".strip()
+            else:
+                return f"{val}{unit}".strip()
+        
+        value_label = tk.Label(control_frame, 
+                             text=format_value(),
+                             font=('SF Pro Mono', 11, 'bold'),
+                             bg=self.colors['surface_card'],
+                             fg=self.colors['accent_primary'],
+                             width=8)
+        value_label.pack(side=tk.LEFT)
+        
+        # スライダー（右側）
+        slider_frame = tk.Frame(control_frame, bg=self.colors['surface_card'])
+        slider_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(self.design_tokens['spacing']['xs'], 0))
+        
+        # 値の精度を決定
+        if isinstance(variable, tk.DoubleVar):
+            resolution = 0.01 if max_val <= 1 else 0.1
+        else:
+            resolution = 1
+        
+        # スライダー
+        slider = tk.Scale(slider_frame, from_=min_val, to=max_val,
+                         orient='horizontal',
+                         variable=variable,
+                         bg=self.colors['surface_card'],
+                         fg=self.colors['text_primary'],
+                         activebackground=self.colors['accent_primary'],
+                         highlightthickness=0,
+                         troughcolor=self.colors['background_tertiary'],
+                         showvalue=False,
+                         resolution=resolution,
+                         width=10)
+        slider.pack(fill=tk.X)
+        
+        # 値更新時のコールバック
+        def update_value_label(*args):
+            value_label.config(text=format_value())
+        
+        variable.trace('w', update_value_label)
         
     def create_setting_control(self, parent, label, variable, min_val, max_val, row, unit=""):
         """設定コントロール作成"""
@@ -664,7 +807,7 @@ class DarkModeGUI:
     def create_conversion_button(self, parent):
         """変換ボタンセクション"""
         button_frame = tk.Frame(parent, bg=self.colors['background_primary'])
-        button_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['lg'], self.design_tokens['spacing']['md']))
+        button_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['sm'], self.design_tokens['spacing']['xs']))
         
         # ボタンコンテナ（中央配置）
         button_container = tk.Frame(button_frame, bg=self.colors['background_primary'])
@@ -675,22 +818,22 @@ class DarkModeGUI:
                                        "Start Conversion", 
                                        self.start_conversion,
                                        style='Primary',
-                                       width=180,
-                                       height=40)
+                                       width=160,
+                                       height=35)
         convert_btn.pack()
         
     def create_status_section(self, parent):
         """ステータスセクション"""
         # ステータスカード用のコンテナを作成
         self.status_container = tk.Frame(parent, bg=self.colors['background_primary'])
-        self.status_container.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['md']))
+        self.status_container.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xs']))
         
         # 初期状態では非表示
         self.status_card = self.create_card(self.status_container, "Processing Status", visible=False)
         
         # プログレスバーコンテナ
         progress_container = tk.Frame(self.status_card, bg=self.colors['surface_card'])
-        progress_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['sm'], 0))
+        progress_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xxs'], 0))
         
         # パーセンテージラベル（右側）
         self.percentage_label = tk.Label(progress_container, 
@@ -709,7 +852,7 @@ class DarkModeGUI:
         
         # ステージ情報コンテナ
         stage_info_container = tk.Frame(self.status_card, bg=self.colors['surface_card'])
-        stage_info_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['md'], self.design_tokens['spacing']['sm']))
+        stage_info_container.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xs'], self.design_tokens['spacing']['xxs']))
         
         # 現在のステージ表示
         self.current_stage_label = tk.Label(stage_info_container, 
@@ -726,11 +869,11 @@ class DarkModeGUI:
                                    bg=self.colors['surface_card'],
                                    fg=self.colors['text_secondary'],
                                    wraplength=500)
-        self.status_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
+        self.status_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xxs'], 0))
         
         # ステージリスト（進捗を視覚的に表示）
         self.stages_frame = tk.Frame(self.status_card, bg=self.colors['surface_card'])
-        self.stages_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['sm'], 0))
+        self.stages_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xs'], 0))
         
         # 各ステージの表示を作成
         self.stage_indicators = self._create_stage_indicators()
@@ -739,63 +882,59 @@ class DarkModeGUI:
         self.create_log_section(parent)
     
     def _create_stage_indicators(self):
-        """各ステージのインジケーターを作成"""
+        """各ステージのインジケーターを作成（水平配置）"""
         stages = [
-            ("1. 初期化", "モデルとファイルを準備中"),
-            ("2. 音声読み込み", "入力音声ファイルを読み込み中"),
-            ("3. 前処理", "音声データを解析・準備中"),
-            ("4. 特徴抽出", "音声の特徴を抽出中"),
-            ("5. 音声変換", "AIモデルで音声を変換中"),
-            ("6. 後処理", "音質を最適化中"),
-            ("7. 保存", "変換結果を保存中")
+            ("初期化", "Init"),
+            ("読込", "Load"),
+            ("前処理", "Prep"),
+            ("特徴抽出", "Extract"),
+            ("変換", "Convert"),
+            ("後処理", "Post"),
+            ("保存", "Save")
         ]
         
+        # 水平レイアウトコンテナ
+        horizontal_container = tk.Frame(self.stages_frame, bg=self.colors['surface_card'])
+        horizontal_container.pack(fill=tk.X)
+        
         indicators = []
-        for i, (stage_name, stage_desc) in enumerate(stages):
-            # ステージコンテナ
-            stage_container = tk.Frame(self.stages_frame, bg=self.colors['surface_card'])
-            stage_container.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xs']))
+        for i, (stage_name, stage_short) in enumerate(stages):
+            # 各ステージのコンテナ
+            stage_container = tk.Frame(horizontal_container, bg=self.colors['surface_card'])
+            stage_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, 
+                               padx=(0, self.design_tokens['spacing']['xxxs']) if i < len(stages)-1 else (0, 0))
             
-            # インジケーターとテキストのコンテナ
-            indicator_row = tk.Frame(stage_container, bg=self.colors['surface_card'])
-            indicator_row.pack(fill=tk.X)
-            
-            # 円形インジケーター
-            indicator_canvas = tk.Canvas(indicator_row, 
+            # 円形インジケーター（上部）
+            indicator_canvas = tk.Canvas(stage_container, 
                                        width=20, height=20,
                                        bg=self.colors['surface_card'],
                                        highlightthickness=0)
-            indicator_canvas.pack(side=tk.LEFT, padx=(0, self.design_tokens['spacing']['sm']))
+            indicator_canvas.pack(pady=(0, self.design_tokens['spacing']['xxxs']))
             
             # 初期状態（グレー）
-            circle = indicator_canvas.create_oval(2, 2, 18, 18,
+            circle = indicator_canvas.create_oval(3, 3, 17, 17,
                                                 fill=self.colors['background_tertiary'],
                                                 outline=self.colors['border_subtle'],
-                                                width=2)
+                                                width=1)
             
-            # ステージ名と説明
-            text_container = tk.Frame(indicator_row, bg=self.colors['surface_card'])
-            text_container.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            # ステージ番号を中央に表示
+            number_text = indicator_canvas.create_text(10, 10, text=str(i+1),
+                                                     fill=self.colors['text_disabled'],
+                                                     font=('SF Pro Display', 8, 'bold'))
             
-            name_label = tk.Label(text_container,
+            # ステージ名（下部）
+            name_label = tk.Label(stage_container,
                                 text=stage_name,
-                                font=('SF Pro Display', 11, 'bold'),
+                                font=('SF Pro Display', 8, 'bold'),
                                 bg=self.colors['surface_card'],
                                 fg=self.colors['text_tertiary'])
-            name_label.pack(anchor='w')
-            
-            desc_label = tk.Label(text_container,
-                                text=stage_desc,
-                                font=('SF Pro Display', 10),
-                                bg=self.colors['surface_card'],
-                                fg=self.colors['text_disabled'])
-            desc_label.pack(anchor='w')
+            name_label.pack()
             
             indicators.append({
                 'canvas': indicator_canvas,
                 'circle': circle,
+                'number_text': number_text,
                 'name_label': name_label,
-                'desc_label': desc_label,
                 'container': stage_container
             })
             
@@ -882,7 +1021,7 @@ class DarkModeGUI:
             self.current_stage_label.config(text=stage_names[stage_index])
             self.status_label.config(text=message)
         
-        # ステージインジケーターを更新
+        # ステージインジケーターを更新（水平レイアウト版）
         if hasattr(self, 'stage_indicators'):
             for i, indicator in enumerate(self.stage_indicators):
                 if i < stage_index:
@@ -890,22 +1029,25 @@ class DarkModeGUI:
                     indicator['canvas'].itemconfig(indicator['circle'],
                                                  fill=self.colors['success'],
                                                  outline=self.colors['success'])
+                    indicator['canvas'].itemconfig(indicator['number_text'],
+                                                 fill='white')
                     indicator['name_label'].config(fg=self.colors['success'])
-                    indicator['desc_label'].config(fg=self.colors['text_secondary'])
                 elif i == stage_index:
                     # 現在のステージ（青）
                     indicator['canvas'].itemconfig(indicator['circle'],
                                                  fill=self.colors['accent_primary'],
                                                  outline=self.colors['accent_primary'])
+                    indicator['canvas'].itemconfig(indicator['number_text'],
+                                                 fill='white')
                     indicator['name_label'].config(fg=self.colors['accent_primary'])
-                    indicator['desc_label'].config(fg=self.colors['text_primary'])
                 else:
                     # 未完了のステージ（グレー）
                     indicator['canvas'].itemconfig(indicator['circle'],
                                                  fill=self.colors['background_tertiary'],
                                                  outline=self.colors['border_subtle'])
+                    indicator['canvas'].itemconfig(indicator['number_text'],
+                                                 fill=self.colors['text_disabled'])
                     indicator['name_label'].config(fg=self.colors['text_tertiary'])
-                    indicator['desc_label'].config(fg=self.colors['text_disabled'])
         
         # UIを更新
         self.root.update_idletasks()
@@ -916,27 +1058,27 @@ class DarkModeGUI:
                        bg=self.colors['surface_card'],
                        relief='flat')
         if visible:
-            card.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['md']))
+            card.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xs']))
         
-        # カード内部のパディング（よりコンパクト）
+        # カード内部のパディング（超コンパクト）
         inner = tk.Frame(card, bg=self.colors['surface_card'])
         inner.pack(fill=tk.BOTH, expand=True, 
-                  padx=self.design_tokens['spacing']['md'],
-                  pady=self.design_tokens['spacing']['md'])
+                  padx=self.design_tokens['spacing']['xs'],
+                  pady=self.design_tokens['spacing']['xs'])
         
         # タイトル
         if title:
             title_label = tk.Label(inner, text=title,
-                                 font=('SF Pro Display', 14, 'bold'),
+                                 font=('SF Pro Display', 13, 'bold'),
                                  bg=self.colors['surface_card'],
                                  fg=self.colors['text_primary'])
-            title_label.pack(anchor='w', pady=(0, self.design_tokens['spacing']['xs']))
+            title_label.pack(anchor='w', pady=(0, self.design_tokens['spacing']['xxs']))
             
             # 区切り線
             separator = tk.Frame(inner, 
                                bg=self.colors['divider'], 
                                height=1)
-            separator.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xs']))
+            separator.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['xxs']))
         
         return inner
         
@@ -1010,74 +1152,212 @@ class DarkModeGUI:
             return "..." + os.sep + parts[-1]
         
         return start + os.sep + "..." + os.sep + end
+    
+    def open_model_settings(self):
+        """モデル設定ダイアログを開く"""
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("Model Settings")
+        settings_window.geometry("500x200")
+        settings_window.configure(bg='#0A0A0B')
+        settings_window.transient(self.root)
+        settings_window.grab_set()
         
-    def load_models(self):
-        """モデルの読み込み"""
-        # モデルディレクトリから番号付きフォルダを検索
-        if os.path.exists(self.model_dir):
-            self.log_message(f"Loading models from {self.model_dir}")
-            models = []
+        # ウィンドウを中央に配置
+        settings_window.update_idletasks()
+        x = (settings_window.winfo_screenwidth() - settings_window.winfo_width()) // 2
+        y = (settings_window.winfo_screenheight() - settings_window.winfo_height()) // 2
+        settings_window.geometry(f"+{x}+{y}")
+        
+        # メインフレーム
+        main_frame = tk.Frame(settings_window, bg='#111113')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # タイトル
+        title_label = tk.Label(main_frame, 
+                              text="Model Directory Settings",
+                              font=('SF Pro Display', 16, 'bold'),
+                              bg='#111113',
+                              fg='#FFFFFF')
+        title_label.pack(pady=(0, 15))
+        
+        # 現在のパス表示
+        current_frame = tk.Frame(main_frame, bg='#111113')
+        current_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        tk.Label(current_frame, text="Current Model Directory:",
+                font=('SF Pro Display', 12, 'bold'),
+                bg='#111113',
+                fg='#B8B8B8').pack(anchor='w')
+        
+        current_path_label = tk.Label(current_frame, 
+                                     text=self.model_dir_var.get(),
+                                     font=('SF Pro Mono', 10),
+                                     bg='#111113',
+                                     fg='#FFFFFF',
+                                     wraplength=450)
+        current_path_label.pack(anchor='w', pady=(5, 0))
+        
+        # ボタンフレーム
+        button_frame = tk.Frame(main_frame, bg='#111113')
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        # フォルダ選択ボタン
+        def browse_model_dir():
+            new_dir = filedialog.askdirectory(
+                title="Select Model Directory",
+                initialdir=self.model_dir_var.get()
+            )
+            if new_dir:
+                self.model_dir_var.set(new_dir)
+                current_path_label.config(text=new_dir)
+        
+        # ボタンコンテナフレーム
+        buttons_container = tk.Frame(button_frame, bg='#111113')
+        buttons_container.pack(fill=tk.X)
+        
+        # 左側のボタンフレーム
+        left_btn_frame = tk.Frame(buttons_container, bg='#111113')
+        left_btn_frame.pack(side=tk.LEFT)
+        
+        # Browse Folderボタン
+        browse_btn = self.create_button(left_btn_frame, "Browse Folder", browse_model_dir, style='Secondary')
+        browse_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 右側のボタンフレーム
+        right_btn_frame = tk.Frame(buttons_container, bg='#111113')
+        right_btn_frame.pack(side=tk.RIGHT)
+        
+        # キャンセル・OK ボタン
+        def apply_settings():
+            self.save_settings()
+            self.load_models()  # モデルを再読み込み
+            settings_window.destroy()
+            # 簡単な通知
+            self.log_message(f"Model directory updated: {self.model_dir_var.get()}")
             
-            # 番号付きディレクトリをチェック
-            for folder in sorted(os.listdir(self.model_dir)):
-                folder_path = os.path.join(self.model_dir, folder)
-                
-                # ディレクトリかつ数字の場合
-                if os.path.isdir(folder_path) and folder.isdigit():
-                    # params.jsonファイルを探す
-                    params_file = os.path.join(folder_path, 'params.json')
+        def cancel_settings():
+            # 変更をリセット
+            self.load_settings()
+            settings_window.destroy()
+        
+        # Cancelボタン
+        cancel_btn = self.create_button(right_btn_frame, "Cancel", cancel_settings, style='Secondary')
+        cancel_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Applyボタン
+        ok_btn = self.create_button(right_btn_frame, "Apply", apply_settings, style='Primary')
+        ok_btn.pack(side=tk.LEFT)
+    
+    def validate_filename(self, *args):
+        """ファイル名のバリデーション"""
+        filename = self.output_filename_var.get()
+        
+        # 不正な文字をチェック
+        invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+        has_invalid = any(char in filename for char in invalid_chars)
+        
+        # エントリの色を変更してバリデーション結果を表示
+        if has_invalid or not filename.strip():
+            self.filename_entry.config(bg='#4A2C2A')  # 薄い赤色
+        else:
+            self.filename_entry.config(bg=self.colors['background_secondary'])
+            
+        # プレビューを更新
+        self.update_output_preview()
+        
+    def search_models_recursive(self, directory):
+        """再帰的にモデルファイルを検索"""
+        models = []
+        
+        if not os.path.exists(directory):
+            return models
+            
+        for root, dirs, files in os.walk(directory):
+            # params.jsonがある場合（構造化されたモデル）
+            if 'params.json' in files:
+                params_file = os.path.join(root, 'params.json')
+                try:
+                    with open(params_file, 'r', encoding='utf-8') as f:
+                        params = json.load(f)
                     
-                    if os.path.exists(params_file):
-                        # params.jsonを読み込む
-                        try:
-                            with open(params_file, 'r', encoding='utf-8') as f:
-                                params = json.load(f)
-                                
-                            # モデルファイルを探す（.pthファイル）
-                            pth_files = [f for f in os.listdir(folder_path) if f.endswith('.pth')]
-                            if pth_files:
-                                model_file = pth_files[0]
-                                
-                                # インデックスファイルの確認
-                                index_files = [f for f in os.listdir(folder_path) if f.endswith('.index')]
-                                has_index = len(index_files) > 0
-                                
-                                model_name = params.get('name', f'Model {folder}')
-                                models.append({
-                                    'name': model_name,
-                                    'file': os.path.join(folder_path, model_file),
-                                    'config': params_file,
-                                    'folder': folder,
-                                    'params': params,
-                                    'has_index': has_index,
-                                    'index_file': os.path.join(folder_path, index_files[0]) if has_index else None
-                                })
-                                self.log_message(f"Loaded model: {model_name} from folder {folder}")
-                        except Exception as e:
-                            print(f"Error loading model from {folder}: {e}")
-                            
-            # また、ルートディレクトリの.pthファイルもチェック（後方互換性）
-            for file in os.listdir(self.model_dir):
-                if file.endswith('.pth') and not file.startswith(('hubert', 'rmvpe')):
-                    model_name = os.path.splitext(file)[0]
-                    # 既に読み込まれていないか確認
-                    if not any(m['name'] == model_name for m in models):
+                    # .pthファイルを探す
+                    pth_files = [f for f in files if f.endswith('.pth')]
+                    if pth_files:
+                        model_file = pth_files[0]
+                        
+                        # インデックスファイルの確認
+                        index_files = [f for f in files if f.endswith('.index')]
+                        has_index = len(index_files) > 0
+                        
+                        model_name = params.get('name', os.path.basename(root))
+                        relative_path = os.path.relpath(root, directory)
+                        
                         models.append({
-                            'name': model_name,
-                            'file': os.path.join(self.model_dir, file),
-                            'config': None,
-                            'folder': None,
-                            'params': {},
-                            'has_index': False,
-                            'index_file': None
+                            'name': f"{model_name} ({relative_path})" if relative_path != '.' else model_name,
+                            'file': os.path.join(root, model_file),
+                            'config': params_file,
+                            'folder': os.path.basename(root),
+                            'params': params,
+                            'has_index': has_index,
+                            'index_file': os.path.join(root, index_files[0]) if has_index else None,
+                            'path': root
                         })
                         
-            # ログに総数を記録
-            self.log_message(f"Total models loaded: {len(models)}")
-                        
-            # モデルカードを作成
-            for i, model in enumerate(models):
-                self.create_model_card(model, i)
+                except Exception as e:
+                    print(f"Error loading model from {root}: {e}")
+            
+            # 単体の.pthファイル（構造化されていないモデル）
+            else:
+                pth_files = [f for f in files if f.endswith('.pth') and not f.startswith(('hubert', 'rmvpe'))]
+                for pth_file in pth_files:
+                    model_name = os.path.splitext(pth_file)[0]
+                    relative_path = os.path.relpath(root, directory)
+                    
+                    # 同じ名前のインデックスファイルがあるかチェック
+                    index_file_name = f"{model_name}.index"
+                    has_index = index_file_name in files
+                    
+                    full_name = f"{model_name} ({relative_path})" if relative_path != '.' else model_name
+                    
+                    models.append({
+                        'name': full_name,
+                        'file': os.path.join(root, pth_file),
+                        'config': None,
+                        'folder': None,
+                        'params': {},
+                        'has_index': has_index,
+                        'index_file': os.path.join(root, index_file_name) if has_index else None,
+                        'path': root
+                    })
+        
+        return models
+
+    def load_models(self):
+        """モデルの読み込み（再帰的検索）"""
+        # 既存のモデルカードをクリア
+        if hasattr(self, 'model_cards'):
+            for card_frame, inner, model in self.model_cards:
+                card_frame.destroy()
+            self.model_cards = []
+            
+        # モデルディレクトリから再帰的に検索
+        self.model_dir = self.model_dir_var.get()
+        self.log_message(f"Loading models from {self.model_dir} (recursive search)")
+        
+        models = self.search_models_recursive(self.model_dir)
+        
+        # 名前でソート
+        models.sort(key=lambda x: x['name'].lower())
+        
+        # ログに総数を記録
+        self.log_message(f"Total models found: {len(models)}")
+        
+        # モデルカードを作成
+        for i, model in enumerate(models):
+            self.create_model_card(model, i)
+            
+        if models:
+            self.log_message(f"Models loaded successfully from {len(set(m['path'] for m in models))} directories")
                 
     def create_model_card(self, model, index):
         """モデルカードUI"""
@@ -1171,19 +1451,65 @@ class DarkModeGUI:
     def update_output_preview(self):
         """出力ファイル名のプレビューを更新"""
         if hasattr(self, 'output_preview_label'):
-            if self.input_var.get() and self.selected_model.get():
-                input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
+            # カスタムファイル名が設定されている場合
+            custom_filename = self.output_filename_var.get().strip()
+            if custom_filename:
+                # バリデーション結果に基づいてプレビュー色を変更
+                invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+                has_invalid = any(char in custom_filename for char in invalid_chars)
                 
-                # モデル名から安全なファイル名を作成
+                if has_invalid:
+                    preview_text = f"❌ Invalid filename: {custom_filename}.wav"
+                    color = self.colors['error']
+                else:
+                    preview_text = f"✓ {custom_filename}.wav"
+                    color = self.colors['success']
+                    
+                self.output_preview_label.config(text=preview_text, fg=color)
+                
+            # 自動生成プレビュー（入力ファイル名+モデル名ベース）
+            elif self.input_var.get() and self.selected_model.get():
+                input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
                 safe_model_name = self.selected_model.get()
                 for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                     safe_model_name = safe_model_name.replace(char, '_')
                 safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
                 
-                preview_name = f"{input_name}_{safe_model_name}_[timestamp].wav"
-                self.output_preview_label.config(text=preview_name)
+                preview_name = f"Auto: {input_name}_{safe_model_name}_[timestamp].wav"
+                self.output_preview_label.config(text=preview_name, fg=self.colors['text_tertiary'])
+            elif self.selected_model.get():
+                safe_model_name = self.selected_model.get()
+                for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                    safe_model_name = safe_model_name.replace(char, '_')
+                safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+                
+                preview_name = f"Auto: {safe_model_name}_[timestamp].wav"
+                self.output_preview_label.config(text=preview_name, fg=self.colors['text_tertiary'])
             else:
-                self.output_preview_label.config(text="[Select input file and model first]")
+                self.output_preview_label.config(text="[Select input file and model first]", 
+                                                fg=self.colors['text_tertiary'])
+                
+            # デフォルトファイル名を入力ファイル名+モデル名に設定
+            if self.input_var.get() and self.selected_model.get():
+                input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
+                safe_model_name = self.selected_model.get()
+                for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                    safe_model_name = safe_model_name.replace(char, '_')
+                safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+                
+                # 入力ファイル名+モデル名をデフォルトとして設定
+                suggested_name = f"{input_name}_{safe_model_name}"
+                if self.output_filename_var.get() != suggested_name:
+                    self.output_filename_var.set(suggested_name)
+            elif self.selected_model.get():
+                safe_model_name = self.selected_model.get()
+                for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                    safe_model_name = safe_model_name.replace(char, '_')
+                safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+                
+                # モデル名のみをデフォルトとして設定
+                if self.output_filename_var.get() != safe_model_name:
+                    self.output_filename_var.set(safe_model_name)
         
     def update_model_selection(self, selected_card):
         """モデル選択状態の視覚的更新"""
@@ -1313,19 +1639,32 @@ class DarkModeGUI:
             return
             
         # 出力ファイル名の生成
-        input_file = self.input_var.get()
-        input_name = os.path.splitext(os.path.basename(input_file))[0]
+        custom_filename = self.output_filename_var.get().strip()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # モデル名から安全なファイル名を作成（特殊文字を除去）
-        safe_model_name = self.selected_model.get()
-        # ファイル名に使えない文字を置換
-        for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
-            safe_model_name = safe_model_name.replace(char, '_')
-        # 連続するアンダースコアを1つに
-        safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+        if custom_filename:
+            # カスタムファイル名のバリデーション
+            invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+            if any(char in custom_filename for char in invalid_chars):
+                self.log_message("Invalid characters in filename", "ERROR")
+                messagebox.showerror("Error", "Filename contains invalid characters: / \\ : * ? \" < > |")
+                return
+            output_filename = f"{custom_filename}_{timestamp}.wav"
+        else:
+            # 自動生成ファイル名
+            input_file = self.input_var.get()
+            input_name = os.path.splitext(os.path.basename(input_file))[0]
+            
+            # モデル名から安全なファイル名を作成（特殊文字を除去）
+            safe_model_name = self.selected_model.get()
+            # ファイル名に使えない文字を置換
+            for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                safe_model_name = safe_model_name.replace(char, '_')
+            # 連続するアンダースコアを1つに
+            safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+            
+            output_filename = f"{input_name}_{safe_model_name}_{timestamp}.wav"
         
-        output_filename = f"{input_name}_{safe_model_name}_{timestamp}.wav"
         self.output_file_path = os.path.join(output_dir, output_filename)
         
         # ステータスカードを表示
