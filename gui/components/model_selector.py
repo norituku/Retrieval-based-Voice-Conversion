@@ -369,5 +369,13 @@ class ModelSelector(tk.Frame):
         
     def open_settings(self):
         """設定ダイアログを開く（実装は親クラスで）"""
-        if hasattr(self.master, 'open_model_settings'):
-            self.master.open_model_settings()
+        # 親ウィジェットを辿ってopen_model_settingsメソッドを探す
+        widget = self.master
+        while widget:
+            if hasattr(widget, 'open_model_settings'):
+                widget.open_model_settings()
+                return
+            widget = getattr(widget, 'master', None)
+        
+        # 見つからない場合はエラーメッセージ
+        print("Error: open_model_settings method not found in parent widgets")

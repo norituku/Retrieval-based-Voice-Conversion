@@ -722,22 +722,101 @@ class DarkModeGUI:
         
     def open_model_settings(self):
         """モデル設定ダイアログを開く"""
-        # 簡素化された設定ダイアログ
         settings_window = tk.Toplevel(self.root)
         settings_window.title("Model Settings")
-        settings_window.geometry("400x150")
+        settings_window.geometry("500x200")
         settings_window.configure(bg=self.colors['background_primary'])
         settings_window.transient(self.root)
         settings_window.grab_set()
         
-        # 中央配置
+        # ウィンドウを中央に配置
         settings_window.update_idletasks()
         x = (settings_window.winfo_screenwidth() - settings_window.winfo_width()) // 2
         y = (settings_window.winfo_screenheight() - settings_window.winfo_height()) // 2
         settings_window.geometry(f"+{x}+{y}")
         
-        messagebox.showinfo("Info", "Model settings functionality will be implemented in the next iteration.")
-        settings_window.destroy()
+        # メインフレーム
+        main_frame = tk.Frame(settings_window, bg=self.colors['surface_card'])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # タイトル
+        title_label = tk.Label(main_frame, 
+                              text="Model Directory Settings",
+                              font=('SF Pro Display', 16, 'bold'),
+                              bg=self.colors['surface_card'],
+                              fg=self.colors['text_primary'])
+        title_label.pack(pady=(0, 15))
+        
+        # 現在のパス表示
+        current_frame = tk.Frame(main_frame, bg=self.colors['surface_card'])
+        current_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        tk.Label(current_frame, text="Current Model Directory:",
+                font=('SF Pro Display', 12, 'bold'),
+                bg=self.colors['surface_card'],
+                fg=self.colors['text_secondary']).pack(anchor='w')
+        
+        current_path_label = tk.Label(current_frame, 
+                                     text=self.model_dir_var.get(),
+                                     font=('SF Pro Mono', 10),
+                                     bg=self.colors['surface_card'],
+                                     fg=self.colors['text_primary'],
+                                     wraplength=450)
+        current_path_label.pack(anchor='w', pady=(5, 0))
+        
+        # ボタンフレーム
+        button_frame = tk.Frame(main_frame, bg=self.colors['surface_card'])
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        # フォルダ選択ボタン
+        def browse_model_dir():
+            from tkinter import filedialog
+            new_dir = filedialog.askdirectory(
+                title="Select Model Directory",
+                initialdir=self.model_dir_var.get()
+            )
+            if new_dir:
+                self.model_dir_var.set(new_dir)
+                current_path_label.config(text=new_dir)
+                
+        # ボタンコンテナフレーム
+        buttons_container = tk.Frame(button_frame, bg=self.colors['surface_card'])
+        buttons_container.pack(fill=tk.X)
+        
+        # 左側のボタンフレーム
+        left_btn_frame = tk.Frame(buttons_container, bg=self.colors['surface_card'])
+        left_btn_frame.pack(side=tk.LEFT)
+        
+        # Browse Folderボタン
+        browse_btn = self.create_button(left_btn_frame, "Browse Folder", browse_model_dir, style='Secondary')
+        browse_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 右側のボタンフレーム
+        right_btn_frame = tk.Frame(buttons_container, bg=self.colors['surface_card'])
+        right_btn_frame.pack(side=tk.RIGHT)
+        
+        # キャンセル・OK ボタン
+        def apply_settings():
+            self.save_settings()
+            # モデルセレクターのモデルディレクトリを更新
+            self.model_selector.model_dir = self.model_dir_var.get()
+            self.model_selector.load_models()  # モデルを再読み込み
+            settings_window.destroy()
+            # 簡単な通知
+            self.log_message(f"Model directory updated: {self.model_dir_var.get()}")
+            
+        def cancel_settings():
+            # 変更をリセット
+            self.load_settings()
+            settings_window.destroy()
+        
+        # Cancelボタン
+        cancel_btn = self.create_button(right_btn_frame, "Cancel", cancel_settings, style='Secondary')
+        cancel_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Applyボタン
+        ok_btn = self.create_button(right_btn_frame, "Apply", apply_settings, style='Primary')
+        ok_btn.pack(side=tk.LEFT)
         
     def log_message(self, message, level="INFO"):
         """ログメッセージを追加"""
