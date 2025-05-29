@@ -1871,7 +1871,7 @@ class DarkModeGUI:
 
 
     def _run_rvc_with_progress(self, cmd_array, env, project_dir):
-        """RVC推論をプログレス追跡しながら実行（内蔵プログレスバー使用）"""
+        """RVC推論をプログレス追跡しながら実行（処理段階を詳細に監視）"""
         
         # ステージ3: 特徴抽出を開始
         self.update_progress(3, 0, "音声の特徴を抽出中...")
@@ -1888,8 +1888,9 @@ class DarkModeGUI:
         )
         
         current_stage = 3  # 特徴抽出ステージ
+        stage_progress = {3: 0, 4: 0, 5: 0}  # 各ステージの進捗を保持
+        processing_times = {}  # 処理時間の記録
         line_count = 0
-        total_lines_estimate = 100  # 推定行数
         
         for line in iter(process.stdout.readline, ''):
             if line:
@@ -1898,43 +1899,93 @@ class DarkModeGUI:
                     self.log_message(line)
                     line_count += 1
                     
-                    # 行数に基づく進捗更新
-                    stage_progress = min((line_count / total_lines_estimate) * 100, 100)
+                    # RVCの処理段階を詳細に解析
+                    # 1. 音声読み込み段階
+                    if "load_audio" in line or "Loading audio" in line:
+                        if stage_progress[3] < 10:
+                            stage_progress[3] = 10
+                            self.update_progress(3, 10, "音声ファイルを読み込み中...")
                     
-                    # キーワードによる進捗とステージの推定
-                    if "Loading" in line or "loading" in line:
-                        self.update_progress(current_stage, 30, "モデルを読み込み中...")
-                    elif "Extract" in line or "extract" in line:
-                        if current_stage == 3:
-                            self.update_progress(3, 70, "特徴抽出を実行中...")
-                    elif "Process" in line or "process" in line:
+                    # 2. モデル読み込み段階
+                    elif any(keyword in line for keyword in ["Loading model", "load model", "Loading checkpoint"]):
+                        if stage_progress[3] < 25:
+                            stage_progress[3] = 25
+                            self.update_progress(3, 25, "AIモデルを読み込み中...")
+                    
+                    # 3. Hubert特徴抽出
+                    elif any(keyword in line for keyword in ["hubert", "Hubert", "extract_feature", "extracting features"]):
+                        if stage_progress[3] < 60:
+                            stage_progress[3] = 60
+                            self.update_progress(3, 60, "音声特徴を抽出中...")
+                    
+                    # 4. F0（ピッチ）推定
+                    elif any(keyword in line for keyword in ["f0", "F0", "pitch", "rmvpe", "get_f0"]):
+                        if stage_progress[3] < 85:
+                            stage_progress[3] = 85
+                            self.update_progress(3, 85, "ピッチを解析中...")
+                    
+                    # 5. 推論開始（音声変換）
+                    elif any(keyword in line for keyword in ["infer", "Inferring", "inference", "vc start"]):
                         if current_stage < 4:
-                            # ステージ4: モデル推論に移行
+                            stage_progress[3] = 100
                             self.update_progress(3, 100, "特徴抽出完了")
                             current_stage = 4
-                            self.update_progress(4, 0, "AIモデルで音声を変換中...")
-                        self.update_progress(4, 50, "音声変換を処理中...")
-                    elif "Generate" in line or "generate" in line:
-                        self.update_progress(4, 80, "音声を生成中...")
-                    elif "Save" in line or "save" in line or "Write" in line or "write" in line:
+                            stage_progress[4] = 10
+                            self.update_progress(4, 10, "音声変換を開始...")
+                    
+                    # 6. 変換処理中
+                    elif any(keyword in line for keyword in ["Converting", "Processing", "net_g.infer"]):
+                        if current_stage == 4 and stage_progress[4] < 70:
+                            stage_progress[4] = 70
+                            self.update_progress(4, 70, "AIで音声を変換中...")
+                    
+                    # 7. 後処理
+                    elif any(keyword in line for keyword in ["tgt_sr", "resample", "Resampling"]):
+                        if current_stage == 4 and stage_progress[4] < 90:
+                            stage_progress[4] = 90
+                            self.update_progress(4, 90, "音声をリサンプリング中...")
+                    
+                    # 8. 保存処理
+                    elif any(keyword in line for keyword in ["write", "Write", "save", "Save", "sf.write"]):
                         if current_stage < 5:
-                            # ステージ5: 後処理に移行
+                            stage_progress[4] = 100
                             self.update_progress(4, 100, "音声変換完了")
                             current_stage = 5
-                            self.update_progress(5, 0, "音質の最適化を実行中...")
-                        self.update_progress(5, 90, "最適化処理中...")
+                            stage_progress[5] = 50
+                            self.update_progress(5, 50, "ファイルを保存中...")
                     
-                    # 進捗の詳細表示
-                    if line_count % 5 == 0:  # 5行ごとに更新
-                        if current_stage == 3:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(3, progress, f"特徴抽出中... ({line_count}行処理)")
-                        elif current_stage == 4:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(4, progress, f"音声変換中... ({line_count}行処理)")
-                        elif current_stage == 5:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(5, progress, f"後処理中... ({line_count}行処理)")
+                    # 9. 処理時間の記録
+                    elif "npy:" in line or "f0:" in line or "infer:" in line:
+                        # 処理時間情報を解析
+                        if "npy:" in line:
+                            self.update_progress(current_stage, stage_progress[current_stage], "特徴抽出時間を記録...")
+                        elif "f0:" in line:
+                            self.update_progress(current_stage, stage_progress[current_stage], "ピッチ推定時間を記録...")
+                        elif "infer:" in line:
+                            self.update_progress(current_stage, stage_progress[current_stage], "推論時間を記録...")
+                    
+                    # 10. 完了メッセージ
+                    elif any(keyword in line for keyword in ["Success", "successfully", "finished", "complete"]):
+                        if current_stage == 5:
+                            stage_progress[5] = 95
+                            self.update_progress(5, 95, "処理がほぼ完了...")
+                    
+                    # 進捗の自動増加（長時間処理対応）
+                    if line_count % 5 == 0:  # 5行ごとに微増
+                        if current_stage in stage_progress:
+                            # 現在の進捗に応じて増分を調整
+                            current = stage_progress[current_stage]
+                            if current < 95:  # 95%まで
+                                increment = 2 if current < 50 else 1
+                                new_progress = min(current + increment, 95)
+                                if new_progress > current:
+                                    stage_progress[current_stage] = new_progress
+                                    messages = {
+                                        3: "特徴を解析中...",
+                                        4: "音声を変換中...",
+                                        5: "最終処理中..."
+                                    }
+                                    self.update_progress(current_stage, new_progress, messages.get(current_stage, "処理中..."))
                         
         process.wait()
         
