@@ -277,22 +277,22 @@ class RVCManager:
         
     def generate_output_filename(self, input_file, model_name, custom_name=None):
         """出力ファイル名を生成"""
-        if custom_name:
+        # 入力ファイル名を取得
+        input_name = os.path.splitext(os.path.basename(input_file))[0]
+        
+        # モデル名から安全なファイル名を作成
+        safe_model_name = model_name
+        for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+            safe_model_name = safe_model_name.replace(char, '_')
+        safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+        
+        if custom_name and custom_name.strip():
             # カスタム名のバリデーション
             invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
             if any(char in custom_name for char in invalid_chars):
                 raise ValueError("ファイル名に無効な文字が含まれています")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"{custom_name}_{timestamp}.wav"
+            # カスタム名を使用する場合でも {元ファイル名}_{モデル名}_{カスタム名}.wav の形式
+            return f"{input_name}_{safe_model_name}_{custom_name.strip()}.wav"
         else:
-            # 自動生成
-            input_name = os.path.splitext(os.path.basename(input_file))[0]
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # モデル名から安全なファイル名を作成
-            safe_model_name = model_name
-            for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
-                safe_model_name = safe_model_name.replace(char, '_')
-            safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
-            
-            return f"{input_name}_{safe_model_name}_{timestamp}.wav"
+            # 基本形式: {元ファイル名}_{モデル名}.wav
+            return f"{input_name}_{safe_model_name}.wav"

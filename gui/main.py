@@ -321,6 +321,16 @@ class DarkModeGUI:
         )
         self.output_selector.pack(fill=tk.X)
         
+        # 出力ファイル名プレビュー
+        self.output_preview_label = tk.Label(
+            left_column,
+            text="",
+            font=('SF Pro Mono', 9),
+            bg=self.colors['surface_card'],
+            fg=self.colors['text_tertiary']
+        )
+        self.output_preview_label.pack(anchor='w', pady=(2, 0))
+        
         # 右カラム：ピッチ設定
         right_column = tk.Frame(grid_container, bg=self.colors['surface_card'])
         right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, 
@@ -503,6 +513,7 @@ class DarkModeGUI:
         """モデル選択時の処理"""
         self.selected_model.set(model_name)
         self.log_message(f"Selected model: {model_name}", "INFO")
+        self.update_output_preview()
         
     def on_input_selected(self, file_path):
         """入力ファイル選択時の処理"""
@@ -513,11 +524,46 @@ class DarkModeGUI:
         default_output = os.path.join(os.path.dirname(file_path), "VoiceConverter_Output")
         self.output_selector.set_path(default_output)
         self.output_var.set(default_output)
+        self.update_output_preview()
         
     def on_output_selected(self, directory):
         """出力ディレクトリ選択時の処理"""
         self.output_var.set(directory)
         self.log_message(f"Output directory: {directory}", "INFO")
+        
+    def update_output_preview(self):
+        """出力ファイル名のプレビューを更新"""
+        if not hasattr(self, 'output_preview_label'):
+            return
+            
+        if self.input_var.get() and self.selected_model.get():
+            try:
+                selected_model = self.model_selector.get_selected_model()
+                if selected_model:
+                    preview_filename = self.rvc_manager.generate_output_filename(
+                        self.input_var.get(),
+                        selected_model['name'],
+                        self.output_filename_var.get() or None
+                    )
+                    self.output_preview_label.config(
+                        text=f"Output: {preview_filename}",
+                        fg=self.colors['text_primary']
+                    )
+                else:
+                    self.output_preview_label.config(
+                        text="[Select model first]",
+                        fg=self.colors['text_tertiary']
+                    )
+            except Exception as e:
+                self.output_preview_label.config(
+                    text=f"Error: {str(e)}",
+                    fg=self.colors['error']
+                )
+        else:
+            self.output_preview_label.config(
+                text="[Select input file and model first]",
+                fg=self.colors['text_tertiary']
+            )
         
     def start_conversion(self):
         """音声変換を開始"""
