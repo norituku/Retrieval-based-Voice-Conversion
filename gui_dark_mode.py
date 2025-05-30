@@ -138,6 +138,7 @@ class DarkModeGUI:
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
         self.output_filename_var = tk.StringVar()  # 出力ファイル名用の変数
+        self.is_manual_filename = False  # ユーザーが手動でファイル名を入力したかを追跡
         self.model_dir_var = tk.StringVar()  # モデルディレクトリ用の変数
         self.pitch_var = tk.IntVar(value=0)
         self.f0_method_var = tk.StringVar(value="rmvpe")  # 最高品質
@@ -657,8 +658,27 @@ class DarkModeGUI:
                                      bd=1)
         self.filename_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
+        # ユーザーの手動入力を検出
+        self.filename_entry.bind('<KeyPress>', self.on_filename_manual_input)
+        self.filename_entry.bind('<FocusIn>', self.on_filename_focus)
+        
         # ファイル名変更時のバリデーション
         self.output_filename_var.trace('w', self.validate_filename)
+        
+        # クリアボタン
+        def clear_filename():
+            self.output_filename_var.set("")
+            self.is_manual_filename = False
+            self.update_output_preview()
+            
+        clear_btn = tk.Label(filename_container, text="✕",
+                           font=('SF Pro Display', 9),
+                           bg=self.colors['surface_card'],
+                           fg=self.colors['text_tertiary'],
+                           cursor='hand2',
+                           padx=5)
+        clear_btn.pack(side=tk.RIGHT)
+        clear_btn.bind('<Button-1>', lambda e: clear_filename())
         
         # 拡張子ラベル
         ext_label = tk.Label(filename_container, text=".wav",
@@ -1125,7 +1145,24 @@ class DarkModeGUI:
             
         def on_click(e):
             btn.config(bg=active_color)
-            self.root.after(100, lambda: btn.config(bg=bg_color))
+            # ウィジェットの存在確認とエラーハンドリングを追加
+            def reset_color():
+                try:
+                    if btn.winfo_exists():
+                        btn.config(bg=bg_color)
+                except tk.TclError:
+                    # ウィジェットが既に破棄されている場合は無視
+                    pass
+            
+            # 親ウィンドウのafterメソッドを使用
+            parent_window = btn.winfo_toplevel()
+            try:
+                parent_window.after(100, reset_color)
+            except:
+                # ウィンドウが破棄される場合に備えて
+                pass
+            
+            # コマンドを実行
             command()
             
         btn.bind('<Enter>', on_enter)
@@ -1203,13 +1240,16 @@ class DarkModeGUI:
         
         # フォルダ選択ボタン
         def browse_model_dir():
-            new_dir = filedialog.askdirectory(
-                title="Select Model Directory",
-                initialdir=self.model_dir_var.get()
-            )
-            if new_dir:
-                self.model_dir_var.set(new_dir)
-                current_path_label.config(text=new_dir)
+            try:
+                new_dir = filedialog.askdirectory(
+                    title="Select Model Directory",
+                    initialdir=self.model_dir_var.get()
+                )
+                if new_dir:
+                    self.model_dir_var.set(new_dir)
+                    current_path_label.config(text=new_dir)
+            except Exception as e:
+                print(f"Error selecting directory: {e}")
         
         # ボタンコンテナフレーム
         buttons_container = tk.Frame(button_frame, bg='#111113')
@@ -1229,16 +1269,25 @@ class DarkModeGUI:
         
         # キャンセル・OK ボタン
         def apply_settings():
-            self.save_settings()
-            self.load_models()  # モデルを再読み込み
-            settings_window.destroy()
-            # 簡単な通知
-            self.log_message(f"Model directory updated: {self.model_dir_var.get()}")
+            try:
+                self.model_dir = self.model_dir_var.get()  # model_dirを更新
+                self.save_settings()
+                self.load_models()  # モデルを再読み込み
+                # 簡単な通知
+                self.log_message(f"Model directory updated: {self.model_dir_var.get()}")
+                settings_window.destroy()
+            except Exception as e:
+                print(f"Error applying settings: {e}")
+                settings_window.destroy()
             
         def cancel_settings():
-            # 変更をリセット
-            self.load_settings()
-            settings_window.destroy()
+            try:
+                # 変更をリセット
+                self.load_settings()
+                settings_window.destroy()
+            except Exception as e:
+                print(f"Error canceling settings: {e}")
+                settings_window.destroy()
         
         # Cancelボタン
         cancel_btn = self.create_button(right_btn_frame, "Cancel", cancel_settings, style='Secondary')
@@ -1247,6 +1296,24 @@ class DarkModeGUI:
         # Applyボタン
         ok_btn = self.create_button(right_btn_frame, "Apply", apply_settings, style='Primary')
         ok_btn.pack(side=tk.LEFT)
+    
+    def on_filename_manual_input(self, event):
+        """ユーザーがキーボードで入力したことを検出"""
+        # 特殊キー（矢印キー、Tab等）は無視
+        if event.keysym not in ['Left', 'Right', 'Up', 'Down', 'Tab', 'Return', 'Escape']:
+            self.is_manual_filename = True
+            
+    def on_filename_focus(self, event):
+        """フィールドにフォーカスが当たった時の処理"""
+        # フィールドが空の場合は手動入力フラグをリセット
+        if not self.output_filename_var.get().strip():
+            self.is_manual_filename = False
+    
+    def on_input_file_changed(self):
+        """入力ファイルが変更された時の処理"""
+        # 新しい入力ファイルが選択された場合、手動入力フラグをリセット
+        self.is_manual_filename = False
+        self.update_output_preview()
     
     def validate_filename(self, *args):
         """ファイル名のバリデーション"""
@@ -1446,14 +1513,19 @@ class DarkModeGUI:
     def on_model_selected(self, model):
         """モデル選択時の処理"""
         self.model_info = model
-        self.update_output_preview()
+        # 手動入力がない場合のみ、出力ファイル名を更新
+        if not self.is_manual_filename:
+            self.update_output_preview()
+        else:
+            # 手動入力がある場合はプレビューのみ更新
+            self.update_output_preview()
         
     def update_output_preview(self):
         """出力ファイル名のプレビューを更新"""
         if hasattr(self, 'output_preview_label'):
             # カスタムファイル名が設定されている場合
             custom_filename = self.output_filename_var.get().strip()
-            if custom_filename:
+            if custom_filename and self.is_manual_filename:
                 # バリデーション結果に基づいてプレビュー色を変更
                 invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
                 has_invalid = any(char in custom_filename for char in invalid_chars)
@@ -1466,6 +1538,7 @@ class DarkModeGUI:
                     color = self.colors['success']
                     
                 self.output_preview_label.config(text=preview_text, fg=color)
+                return  # 手動入力の場合はここで終了（自動上書きを防ぐ）
                 
             # 自動生成プレビュー（入力ファイル名+モデル名ベース）
             elif self.input_var.get() and self.selected_model.get():
@@ -1475,7 +1548,7 @@ class DarkModeGUI:
                     safe_model_name = safe_model_name.replace(char, '_')
                 safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
                 
-                preview_name = f"Auto: {input_name}_{safe_model_name}_[timestamp].wav"
+                preview_name = f"Auto: {input_name}_{safe_model_name}.wav"
                 self.output_preview_label.config(text=preview_name, fg=self.colors['text_tertiary'])
             elif self.selected_model.get():
                 safe_model_name = self.selected_model.get()
@@ -1483,32 +1556,34 @@ class DarkModeGUI:
                     safe_model_name = safe_model_name.replace(char, '_')
                 safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
                 
-                preview_name = f"Auto: {safe_model_name}_[timestamp].wav"
+                preview_name = f"Auto: {safe_model_name}.wav"
                 self.output_preview_label.config(text=preview_name, fg=self.colors['text_tertiary'])
             else:
                 self.output_preview_label.config(text="[Select input file and model first]", 
                                                 fg=self.colors['text_tertiary'])
                 
-            # デフォルトファイル名を入力ファイル名+モデル名に設定
-            if self.input_var.get() and self.selected_model.get():
-                input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
-                safe_model_name = self.selected_model.get()
-                for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
-                    safe_model_name = safe_model_name.replace(char, '_')
-                safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
-                
-                # 入力ファイル名+モデル名をデフォルトとして設定
-                suggested_name = f"{input_name}_{safe_model_name}"
-                if self.output_filename_var.get() != suggested_name:
+            # デフォルトファイル名を設定（手動入力がない場合のみ）
+            if not self.is_manual_filename:
+                if self.input_var.get() and self.selected_model.get():
+                    input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
+                    safe_model_name = self.selected_model.get()
+                    for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                        safe_model_name = safe_model_name.replace(char, '_')
+                    safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
+                    
+                    # 入力ファイル名+モデル名をデフォルトとして設定
+                    suggested_name = f"{input_name}_{safe_model_name}"
                     self.output_filename_var.set(suggested_name)
-            elif self.selected_model.get():
-                safe_model_name = self.selected_model.get()
-                for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
-                    safe_model_name = safe_model_name.replace(char, '_')
-                safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
-                
-                # モデル名のみをデフォルトとして設定
-                if self.output_filename_var.get() != safe_model_name:
+                elif self.input_var.get() and not self.selected_model.get():
+                    # 入力ファイルのみ選択されている場合
+                    input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
+                    self.output_filename_var.set(input_name)
+                elif not self.input_var.get() and self.selected_model.get():
+                    # モデルのみ選択されている場合
+                    safe_model_name = self.selected_model.get()
+                    for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
+                        safe_model_name = safe_model_name.replace(char, '_')
+                    safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
                     self.output_filename_var.set(safe_model_name)
         
     def update_model_selection(self, selected_card):
@@ -1554,6 +1629,8 @@ class DarkModeGUI:
         if filename:
             self.input_var.set(filename)
             self.display_file_info(filename)
+            # 入力ファイル変更時に出力ファイル名を更新
+            self.on_input_file_changed()
             
     def display_file_info(self, filename):
         """選択されたファイル情報を表示"""
@@ -1640,7 +1717,6 @@ class DarkModeGUI:
             
         # 出力ファイル名の生成
         custom_filename = self.output_filename_var.get().strip()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         if custom_filename:
             # カスタムファイル名のバリデーション
@@ -1649,9 +1725,9 @@ class DarkModeGUI:
                 self.log_message("Invalid characters in filename", "ERROR")
                 messagebox.showerror("Error", "Filename contains invalid characters: / \\ : * ? \" < > |")
                 return
-            output_filename = f"{custom_filename}_{timestamp}.wav"
+            output_filename = f"{custom_filename}.wav"
         else:
-            # 自動生成ファイル名
+            # 自動生成ファイル名: {入力ファイル名}_{モデル名}.wav
             input_file = self.input_var.get()
             input_name = os.path.splitext(os.path.basename(input_file))[0]
             
@@ -1663,9 +1739,18 @@ class DarkModeGUI:
             # 連続するアンダースコアを1つに
             safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
             
-            output_filename = f"{input_name}_{safe_model_name}_{timestamp}.wav"
+            output_filename = f"{input_name}_{safe_model_name}.wav"
         
-        self.output_file_path = os.path.join(output_dir, output_filename)
+        # ファイルが既に存在する場合は番号を追加
+        output_path = os.path.join(output_dir, output_filename)
+        counter = 1
+        base_name = os.path.splitext(output_filename)[0]
+        while os.path.exists(output_path):
+            output_filename = f"{base_name}_{counter}.wav"
+            output_path = os.path.join(output_dir, output_filename)
+            counter += 1
+        
+        self.output_file_path = output_path
         
         # ステータスカードを表示
         self.status_card.master.pack(fill=tk.X, pady=(0, self.design_tokens['spacing']['md']))
