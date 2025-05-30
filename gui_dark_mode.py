@@ -1621,7 +1621,7 @@ class DarkModeGUI:
         filename = filedialog.askopenfilename(
             title="Select Audio File",
             filetypes=[
-                ("Audio Files", "*.mp3 *.wav *.m4a *.flac *.ogg"),
+                ("Audio Files", "*.mp3 *.wav *.m4a *.flac *.ogg *.aif *.aiff"),
                 ("All Files", "*.*")
             ]
         )
