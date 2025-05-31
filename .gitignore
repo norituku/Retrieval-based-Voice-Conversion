@@ -185,3 +185,8 @@ test_output.*
 *_fixed.py
 *_integrated.py
 *_original.py
+
+# Build artifacts
+*.dmg
+*.app/
+Voice Converter Simple.app/
