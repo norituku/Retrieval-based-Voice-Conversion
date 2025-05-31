@@ -1,0 +1,36 @@
+#!/opt/homebrew/bin/python3
+
+import sys
+import os
+from pathlib import Path
+
+# Get app's resource directory
+script_dir = Path(__file__).parent
+app_dir = script_dir.parent.parent
+resources_dir = app_dir / "Contents" / "Resources"
+
+# Add resources to Python path
+sys.path.insert(0, str(resources_dir))
+
+# Set environment variables
+os.environ['RVC_ROOT'] = str(resources_dir)
+os.environ['GUI_SETTINGS_FILE'] = str(resources_dir / "gui_settings.json")
+os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
+
+# Change to resources directory
+os.chdir(resources_dir)
+
+# Import and run the GUI
+try:
+    import tkinter
+    exec(open('gui_dark_mode.py').read())
+except ImportError as e:
+    print(f"Error: {e}")
+    print("Tkinter is not available. Please install Python with tkinter support.")
+    sys.exit(1)
+except Exception as e:
+    print(f"Error running GUI: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)

@@ -56,15 +56,23 @@ def load_audio(file: Union[str, Path], sr: int, to_mono: bool = False):
     try:
         # https://github.com/librosa/librosa/issues/1015
         # https://github.com/librosa/librosa/issues/1271
-        # if isinstance(file, (str, Path)): # Pathオブジェクトに統一したのでこのチェックは不要
         if not file_obj.exists(): # Pathオブジェクトの exists() を使用
             raise RuntimeError(
                 f"You input a wrong audio path that does not exist: {file_obj}"
             )
-        audio_data, audio_sr = sf.read(file_obj, dtype="float32") # Pathオブジェクトを渡す
-        # else:
-            # audio_sr = file[0]
-            # audio_data = file[1]
+        
+        # M4A/AACファイルの場合はlibrosaを使用、その他はsoundfileを使用
+        file_suffix = file_obj.suffix.lower()
+        if file_suffix in ['.m4a', '.aac']:
+            logger.info(f"Loading M4A/AAC file with librosa: {file_obj}")
+            # librosaでM4A/AACファイルを読み込み（ffmpegバックエンド使用）
+            audio_data, audio_sr = librosa.load(str(file_obj), sr=None, mono=False)
+            # librosaは(チャンネル, サンプル)の順なので、soundfileと同じ形式に変換
+            if audio_data.ndim > 1:
+                audio_data = audio_data.T
+        else:
+            # 従来通りsoundfileで読み込み
+            audio_data, audio_sr = sf.read(file_obj, dtype="float32")
 
         if audio_data.ndim > 1 and to_mono:
             audio_data = np.mean(audio_data, axis=1)

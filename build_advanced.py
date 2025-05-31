@@ -102,6 +102,7 @@ class MacAppBuilder:
             # Output options
             '--output-dir=dist',
             '--remove-output',
+            '--static-libpython=no',
             
             # Progress options
             '--show-progress',
