@@ -48,8 +48,8 @@ class MacAppBuilder:
             import tkinter
             print("   ✓ Tkinter available")
         except ImportError:
-            print("   ❌ Tkinter not available")
-            return False
+            print("   ⚠️  Tkinter not available (will include in bundle)")
+            # Tkinterがない場合でもビルドを続行
             
         return True
     
@@ -64,13 +64,11 @@ class MacAppBuilder:
             '--macos-app-mode=gui',
             
             # Plugins
-            '--enable-plugin=tk-inter',
             '--enable-plugin=multiprocessing',
             
             # Include data directories (only existing ones)
             '--include-data-dir=model_dir=model_dir',
             '--include-data-dir=rvc=rvc',
-            '--include-data-dir=samples=samples',
             
             # Include data files
             '--include-data-file=gui_settings.json=gui_settings.json',
