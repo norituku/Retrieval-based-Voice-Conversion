@@ -64,6 +64,7 @@ class MacAppBuilder:
             '--macos-app-mode=gui',
             
             # Plugins
+            '--enable-plugin=tk-inter',
             '--enable-plugin=multiprocessing',
             
             # Include data directories (only existing ones)
