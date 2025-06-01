@@ -18,7 +18,14 @@
       "compact_mode": false
     },
     "recent_files": {
-      "input_files": [],
+      "input_files": [
+        "test_batch_input/test_sweep_3s.wav",
+        "test_batch_input/test_880hz_2s.wav",
+        "test_batch_input/test_complex_3s.wav",
+        "test_batch_input/test_220hz_4s.wav",
+        "test_batch_input/test_440hz_3s.wav",
+        "test_audio.wav"
+      ],
       "output_directories": [],
       "max_recent": 10
     }
@@ -150,7 +157,7 @@
   },
   "metadata": {
     "created_date": "2025-06-01T14:04:11.848964",
-    "last_modified": "2025-06-01T14:04:22.188472",
+    "last_modified": "2025-06-01T15:13:32.755050",
     "app_version": "1.0.0",
     "settings_migrations": []
   }

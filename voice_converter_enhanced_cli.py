@@ -371,21 +371,38 @@ class VoiceConverterEnhancedCLI:
                 python_path,
                 "-m", rvc_module,
                 "infer",
-                "--input", input_file,
-                "--output", output_file,
-                "--model", selected_model['path'],
-                "--pitch", str(pitch),
-                "--filter_radius", str(filter_radius),
-                "--index_rate", str(index_rate),
-                "--volume_envelope", str(rms_mix_rate),
-                "--protect", str(protect),
-                "--f0_method", f0_method,
-                "--embedder_model", "hubert"
+                "-i", input_file,
+                "-o", output_file,
+                "-m", selected_model['path'],
+                "-fu", str(pitch),
+                "-fr", str(filter_radius),
+                "-ir", str(index_rate),
+                "-rmr", str(rms_mix_rate),
+                "-p", str(protect),
+                "-fm", f0_method
             ]
             
             # インデックスファイルがある場合
             if selected_model['index']:
-                cmd.extend(["--index", selected_model['index']])
+                cmd.extend(["-if", selected_model['index']])
+            
+            # Hubertモデルパスを探す
+            hubert_path = None
+            possible_paths = [
+                "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/hubert_base.pt",
+                "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/rvc/models/hubert/hubert_base.pt",
+                "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/models/hubert_base.pt"
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    hubert_path = path
+                    break
+            
+            if hubert_path:
+                cmd.extend(["--hubert_model_path", hubert_path])
+            else:
+                # デフォルトパスを使用
+                cmd.extend(["--hubert_model_path", "hubert_base.pt"])
             
             if verbose:
                 print(f"🔧 Command: {' '.join(cmd)}")
