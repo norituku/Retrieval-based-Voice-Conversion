@@ -1,0 +1,30 @@
+{
+  "test_date": "2025-06-01T11:44:55.686211",
+  "system_info": {
+    "python_version": "3.11.9",
+    "platform": "darwin",
+    "working_directory": "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion"
+  },
+  "test_summary": {
+    "total_tests": 6,
+    "passed_tests": 5,
+    "failed_tests": 1,
+    "success_rate": 83.33333333333334
+  },
+  "detailed_results": {
+    "設定管理システム": false,
+    "エラーハンドリング": true,
+    "データ構造": true,
+    "ファイル操作": true,
+    "エラーシナリオ": true,
+    "パフォーマンス": true
+  },
+  "improvement_system_status": {
+    "設定管理システム": false,
+    "エラーハンドリング": true,
+    "データ構造": true,
+    "ファイル操作": true,
+    "エラー対応": true,
+    "パフォーマンス": true
+  }
+}

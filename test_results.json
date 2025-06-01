@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-06-01T11:43:17.023707",
+  "total_tests": 8,
+  "passed_tests": 2,
+  "failed_tests": 6,
+  "success_rate": 25.0,
+  "results": {
+    "モジュールインポート": false,
+    "ファイル構造": true,
+    "設定管理システム": false,
+    "エラーハンドリング": false,
+    "UIコンポーネント": false,
+    "キーボードショートカット": false,
+    "統合GUIシミュレーション": false,
+    "互換モード": true
+  }
+}
