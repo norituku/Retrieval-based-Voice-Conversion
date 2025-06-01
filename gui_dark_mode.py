@@ -25,10 +25,8 @@ except ImportError:
 
 class DarkModeGUI:
     def __init__(self, root):
-        print("DarkModeGUI.__init__ started")
         self.root = root
         self.root.title("Voice Converter")
-        print("Title set")
         
         # ダークモードデザイントークン（改善版）
         self.design_tokens = {
@@ -130,8 +128,8 @@ class DarkModeGUI:
         
         # フォントファミリーの定義
         self.fonts = {
-            'family': 'Arial',  # Arial から変更
-            'mono': 'Courier'   # Courier から変更
+            'family': 'SF Pro Display',
+            'mono': 'SF Mono'
         }
         
         # 変数の初期化（setup_app_directories()より前に実行）
@@ -149,34 +147,20 @@ class DarkModeGUI:
         self.rms_mix_rate_var = tk.DoubleVar(value=0.25)  # 推奨値
         self.protect_var = tk.DoubleVar(value=0.33)       # 推奨値
         
-        print("Variables initialized")
-        
         # アプリケーション設定
-        print("Calling setup_app_directories...")
         self.setup_app_directories()
-        print("setup_app_directories completed")
         
         # カスタムスタイル設定
-        print("Calling setup_styles...")
         self.setup_styles()
-        print("setup_styles completed")
         
         # ウィンドウ設定
-        print("Calling setup_window...")
         self.setup_window()
-        print("setup_window completed")
         
         # UI構築
-        print("Calling create_ui...")
         self.create_ui()
-        print("create_ui completed")
         
         # モデル読み込み
-        print("Calling load_models...")
         self.load_models()
-        print("load_models completed")
-        
-        print("DarkModeGUI.__init__ completed")
         
     def setup_app_directories(self):
         """アプリケーションディレクトリの設定"""
@@ -252,20 +236,20 @@ class DarkModeGUI:
         
         # ラベル
         style.configure('Title.TLabel',
-                       font=('Arial', self.design_tokens['typography']['title1']['size']),
+                       font=('SF Pro Display', self.design_tokens['typography']['title1']['size']),
                        foreground=self.colors['text_primary'])
         
         style.configure('Heading.TLabel',
-                       font=('Arial', self.design_tokens['typography']['headline']['size'], 'bold'),
+                       font=('SF Pro Display', self.design_tokens['typography']['headline']['size'], 'bold'),
                        foreground=self.colors['text_primary'])
         
         style.configure('Body.TLabel',
-                       font=('Arial', self.design_tokens['typography']['body']['size']),
+                       font=('SF Pro Display', self.design_tokens['typography']['body']['size']),
                        foreground=self.colors['text_secondary'])
         
         # ボタン
         style.configure('Primary.TButton',
-                       font=('Arial', self.design_tokens['typography']['body']['size'], 'bold'),
+                       font=('SF Pro Display', self.design_tokens['typography']['body']['size'], 'bold'),
                        background=self.colors['accent_primary'],
                        foreground='white',
                        borderwidth=0,
@@ -277,7 +261,7 @@ class DarkModeGUI:
                  background=[('active', '#4A8FEF'), ('pressed', '#3A7FDF')])
         
         style.configure('Secondary.TButton',
-                       font=('Arial', self.design_tokens['typography']['body']['size']),
+                       font=('SF Pro Display', self.design_tokens['typography']['body']['size']),
                        background=self.colors['background_tertiary'],
                        foreground=self.colors['text_primary'],
                        borderwidth=1,
@@ -374,7 +358,7 @@ class DarkModeGUI:
         
         # タイトル
         title_label = tk.Label(left_frame, text="Voice Converter",
-                              font=('Arial', 18, 'bold'),
+                              font=('SF Pro Display', 18, 'bold'),
                               bg=self.colors['background_secondary'],
                               fg=self.colors['text_primary'])
         title_label.pack(side=tk.LEFT, padx=self.design_tokens['spacing']['sm'])
@@ -426,7 +410,7 @@ class DarkModeGUI:
         title_row.pack(fill=tk.X)
         
         tk.Label(title_row, text="Voice Models",
-                font=('Arial', 16, 'bold'),
+                font=('SF Pro Display', 16, 'bold'),
                 bg=self.colors['surface_sidebar'],
                 fg=self.colors['text_primary']).pack(side=tk.LEFT)
         
@@ -445,7 +429,7 @@ class DarkModeGUI:
         path_label.pack(anchor='w', pady=(2, 0))
         
         tk.Label(header, text="Select a model",
-                font=('Arial', 11),
+                font=('SF Pro Display', 11),
                 bg=self.colors['surface_sidebar'],
                 fg=self.colors['text_secondary']).pack(anchor='w', pady=(2, 0))
         
@@ -566,7 +550,7 @@ class DarkModeGUI:
         
         # 1行にタイトルとサブタイトルを配置
         tk.Label(title_frame, text="Voice Converter - AI Voice Conversion",
-                font=('Arial', 16, 'bold'),
+                font=('SF Pro Display', 16, 'bold'),
                 bg=self.colors['background_primary'],
                 fg=self.colors['text_primary']).pack(anchor='center')
         
@@ -619,7 +603,7 @@ class DarkModeGUI:
         
         # 出力ディレクトリ設定（コンパクト）
         output_label = tk.Label(left_column, text="Output Directory",
-                               font=('Arial', 11, 'bold'),
+                               font=('SF Pro Display', 11, 'bold'),
                                bg=self.colors['surface_card'],
                                fg=self.colors['text_secondary'])
         output_label.pack(anchor='w')
@@ -656,7 +640,7 @@ class DarkModeGUI:
         
         # 出力ファイル名設定
         filename_label = tk.Label(left_column, text="Output Filename",
-                                font=('Arial', 10, 'bold'),
+                                font=('SF Pro Display', 10, 'bold'),
                                 bg=self.colors['surface_card'],
                                 fg=self.colors['text_secondary'])
         filename_label.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
@@ -692,7 +676,7 @@ class DarkModeGUI:
             self.update_output_preview()
             
         clear_btn = tk.Label(filename_container, text="✕",
-                           font=('Arial', 9),
+                           font=('SF Pro Display', 9),
                            bg=self.colors['surface_card'],
                            fg=self.colors['text_tertiary'],
                            cursor='hand2',
@@ -727,7 +711,7 @@ class DarkModeGUI:
         """コンパクトな設定コントロール作成"""
         # ラベル
         label_text = tk.Label(parent, text=f"{label} Adjustment",
-                            font=('Arial', 11, 'bold'),
+                            font=('SF Pro Display', 11, 'bold'),
                             bg=self.colors['surface_card'],
                             fg=self.colors['text_secondary'])
         label_text.pack(anchor='w')
@@ -797,7 +781,7 @@ class DarkModeGUI:
         
         # ラベル
         label_text = tk.Label(top_frame, text=label,
-                            font=('Arial', 12),
+                            font=('SF Pro Display', 12),
                             bg=self.colors['surface_card'],
                             fg=self.colors['text_secondary'])
         label_text.pack(side=tk.LEFT)
@@ -884,7 +868,7 @@ class DarkModeGUI:
         # パーセンテージラベル（右側）
         self.percentage_label = tk.Label(progress_container, 
                                        text="0%",
-                                       font=('Arial', 14, 'bold'),
+                                       font=('SF Pro Display', 14, 'bold'),
                                        bg=self.colors['surface_card'],
                                        fg=self.colors['accent_primary'])
         self.percentage_label.pack(side=tk.RIGHT, padx=(self.design_tokens['spacing']['sm'], 0))
@@ -903,7 +887,7 @@ class DarkModeGUI:
         # 現在のステージ表示
         self.current_stage_label = tk.Label(stage_info_container, 
                                           text="",
-                                          font=('Arial', 13, 'bold'),
+                                          font=('SF Pro Display', 13, 'bold'),
                                           bg=self.colors['surface_card'],
                                           fg=self.colors['text_primary'])
         self.current_stage_label.pack(anchor='w')
@@ -911,7 +895,7 @@ class DarkModeGUI:
         # ステータステキスト（詳細説明）
         self.status_label = tk.Label(stage_info_container, 
                                    text="",
-                                   font=('Arial', 11),
+                                   font=('SF Pro Display', 11),
                                    bg=self.colors['surface_card'],
                                    fg=self.colors['text_secondary'],
                                    wraplength=500)
@@ -966,12 +950,12 @@ class DarkModeGUI:
             # ステージ番号を中央に表示
             number_text = indicator_canvas.create_text(10, 10, text=str(i+1),
                                                      fill=self.colors['text_disabled'],
-                                                     font=('Arial', 8, 'bold'))
+                                                     font=('SF Pro Display', 8, 'bold'))
             
             # ステージ名（下部）
             name_label = tk.Label(stage_container,
                                 text=stage_name,
-                                font=('Arial', 8, 'bold'),
+                                font=('SF Pro Display', 8, 'bold'),
                                 bg=self.colors['surface_card'],
                                 fg=self.colors['text_tertiary'])
             name_label.pack()
@@ -1115,7 +1099,7 @@ class DarkModeGUI:
         # タイトル
         if title:
             title_label = tk.Label(inner, text=title,
-                                 font=('Arial', 13, 'bold'),
+                                 font=('SF Pro Display', 13, 'bold'),
                                  bg=self.colors['surface_card'],
                                  fg=self.colors['text_primary'])
             title_label.pack(anchor='w', pady=(0, self.design_tokens['spacing']['xxs']))
@@ -1137,13 +1121,13 @@ class DarkModeGUI:
             fg_color = 'white'
             hover_color = '#4A8FEF'
             active_color = '#3A7FDF'
-            font_style = ('Arial', 14, 'bold')
+            font_style = ('SF Pro Display', 14, 'bold')
         else:
             bg_color = self.colors['background_tertiary']
             fg_color = self.colors['text_primary']
             hover_color = self.colors['background_elevated']
             active_color = self.colors['background_secondary']
-            font_style = ('Arial', 13, 'normal')
+            font_style = ('SF Pro Display', 13, 'normal')
             
         btn = tk.Label(btn_frame, text=text,
                       font=font_style,
@@ -1238,7 +1222,7 @@ class DarkModeGUI:
         # タイトル
         title_label = tk.Label(main_frame, 
                               text="Model Directory Settings",
-                              font=('Arial', 16, 'bold'),
+                              font=('SF Pro Display', 16, 'bold'),
                               bg='#111113',
                               fg='#FFFFFF')
         title_label.pack(pady=(0, 15))
@@ -1248,7 +1232,7 @@ class DarkModeGUI:
         current_frame.pack(fill=tk.X, pady=(0, 10))
         
         tk.Label(current_frame, text="Current Model Directory:",
-                font=('Arial', 12, 'bold'),
+                font=('SF Pro Display', 12, 'bold'),
                 bg='#111113',
                 fg='#B8B8B8').pack(anchor='w')
         
@@ -1468,7 +1452,7 @@ class DarkModeGUI:
         # モデル名
         name_label = tk.Label(inner, 
                              text=model['name'],
-                             font=('Arial', 13, 'bold'),
+                             font=('SF Pro Display', 13, 'bold'),
                              bg=self.colors['background_secondary'],
                              fg=self.colors['text_primary'],
                              anchor='w')
@@ -1488,7 +1472,7 @@ class DarkModeGUI:
         if info_parts:
             info_label = tk.Label(inner, 
                                 text=' • '.join(info_parts),
-                                font=('Arial', 10),
+                                font=('SF Pro Display', 10),
                                 bg=self.colors['background_secondary'],
                                 fg=self.colors['text_secondary'] if not model.get('has_index') else self.colors['success'])
             info_label.pack(anchor='w')
@@ -1682,7 +1666,7 @@ class DarkModeGUI:
         # ファイル名
         file_name = os.path.basename(filename)
         name_label = tk.Label(file_info, text=file_name,
-                            font=('Arial', 12, 'bold'),
+                            font=('SF Pro Display', 12, 'bold'),
                             bg=self.colors['background_tertiary'],
                             fg=self.colors['text_primary'])
         name_label.pack(side=tk.LEFT)
@@ -2173,29 +2157,9 @@ class DarkModeGUI:
 
 
 def main():
-    try:
-        print("Creating Tk root window...")
-        root = tk.Tk()
-        print("Root window created successfully")
-        
-        print("Creating DarkModeGUI...")
-        app = DarkModeGUI(root)
-        print("DarkModeGUI created successfully")
-        
-        print("Starting mainloop...")
-        root.mainloop()
-        print("Mainloop ended")
-    except Exception as e:
-        print(f"ERROR in main: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # エラーダイアログ表示を試みる
-        try:
-            import tkinter.messagebox as mb
-            mb.showerror("Error", f"Failed to start GUI:\n{type(e).__name__}: {e}")
-        except:
-            pass
+    root = tk.Tk()
+    app = DarkModeGUI(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":
