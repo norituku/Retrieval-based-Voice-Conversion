@@ -1,0 +1,53 @@
+{
+  "timestamp": "2025-06-01T19:08:45.621719",
+  "summary": {
+    "total_tests": 7,
+    "passed": 7,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "test": "Enhanced CLI Availability",
+      "result": true,
+      "details": "Found 2 models, 8 presets",
+      "timestamp": "2025-06-01T19:08:45.616158"
+    },
+    {
+      "test": "Settings File Format",
+      "result": true,
+      "details": "Valid format with 8/8 valid presets",
+      "timestamp": "2025-06-01T19:08:45.616227"
+    },
+    {
+      "test": "Preset Compatibility",
+      "result": true,
+      "details": "Preset creation and retrieval working",
+      "timestamp": "2025-06-01T19:08:45.617121"
+    },
+    {
+      "test": "Settings Persistence",
+      "result": true,
+      "details": "Settings correctly persisted (pitch: 1 -> 2)",
+      "timestamp": "2025-06-01T19:08:45.618267"
+    },
+    {
+      "test": "Import/Export Compatibility",
+      "result": true,
+      "details": "Export and validation successful",
+      "timestamp": "2025-06-01T19:08:45.619362"
+    },
+    {
+      "test": "Batch Processing Integration",
+      "result": true,
+      "details": "Batch processing available, found 5 test files",
+      "timestamp": "2025-06-01T19:08:45.621599"
+    },
+    {
+      "test": "Error Handling Integration",
+      "result": true,
+      "details": "Error handling active, 2 log files found",
+      "timestamp": "2025-06-01T19:08:45.621704"
+    }
+  ]
+}
