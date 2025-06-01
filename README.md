@@ -169,3 +169,71 @@ Build and run via script:
    ```
 
 Notice assumption that weights, indices and input audios are stored in `current-directory/assets`
+
+## Enhanced Features
+
+### Preset Management System
+
+The RVC framework now includes an advanced preset management system that allows you to save, share, and organize your voice conversion settings.
+
+#### Key Features:
+- **Save Custom Presets**: Store your favorite conversion settings for easy reuse
+- **Import/Export**: Share presets with other users or backup your configurations
+- **Built-in Presets**: Optimized settings for different use cases (vocal, speech, performance)
+
+#### Usage:
+```bash
+# List available presets
+python voice_converter_enhanced_cli.py --list-presets
+
+# Use a preset for conversion
+python voice_converter_enhanced_cli.py -i input.wav -o output.wav -m model_name --preset "ボーカル専用高品質"
+
+# Export your presets
+python preset_manager.py export my_presets.json
+```
+
+For detailed information, see [PRESET_MANAGER_GUIDE.md](PRESET_MANAGER_GUIDE.md).
+
+### Integration Testing
+
+A comprehensive integration testing tool ensures compatibility between GUI and CLI versions.
+
+```bash
+# Run integration tests
+python integration_tester.py
+```
+
+Test coverage includes:
+- Settings persistence
+- Preset compatibility
+- Import/Export functionality
+- Batch processing integration
+- Error handling systems
+
+For detailed information, see [INTEGRATION_TEST_GUIDE.md](INTEGRATION_TEST_GUIDE.md).
+
+### Additional Improvements
+
+1. **Enhanced CLI** (`voice_converter_enhanced_cli.py`)
+   - Advanced preset management
+   - Improved error handling
+   - Settings backup/restore
+   - Keyboard shortcuts support
+
+2. **Batch Processing** (`batch_converter.py`)
+   - Process multiple files at once
+   - Preset support for batch operations
+   - Progress tracking and reporting
+
+3. **GUI Dark Mode** (`gui_dark_mode_improved.py`)
+   - Modern dark theme interface
+   - Integrated preset management
+   - Real-time preview capabilities
+
+## Documentation
+
+- [Implementation Guide](IMPLEMENTATION_GUIDE.md) - Detailed implementation documentation
+- [Preset Manager Guide](PRESET_MANAGER_GUIDE.md) - Preset system documentation
+- [Integration Test Guide](INTEGRATION_TEST_GUIDE.md) - Testing framework documentation
+- [Implementation Complete](IMPLEMENTATION_COMPLETE.md) - List of completed features
