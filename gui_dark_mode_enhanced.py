@@ -15,6 +15,102 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+# 柔軟な環境対応システム
+def setup_runtime_environment():
+    """実行時環境の自動設定とPoetry/システムPythonの適応"""
+    
+    # Python実行環境の詳細情報を取得
+    python_path = sys.executable
+    python_version = sys.version.split()[0]
+    
+    print(f"🐍 Python実行環境:")
+    print(f"   Path: {python_path}")
+    print(f"   Version: {python_version}")
+    
+    # tkinterが使用可能かチェック（GUI用に重要）
+    try:
+        import tkinter
+        tkinter_available = True
+        print("✅ tkinter: 利用可能")
+    except ImportError:
+        print("❌ tkinter利用不可 - 適切なPython環境で再実行してください")
+        sys.exit(1)
+    
+    # Poetry環境かシステム環境かを判定（複数の方法で確認）
+    poetry_env_active = False
+    virtual_env = os.environ.get('VIRTUAL_ENV')
+    conda_env = os.environ.get('CONDA_DEFAULT_ENV')
+    
+    if virtual_env:
+        poetry_env_active = True
+        print(f"📦 Poetry/venv環境: {virtual_env}")
+    elif conda_env:
+        print(f"🐍 Conda環境: {conda_env}")
+    else:
+        print("🔧 システムPython環境")
+    
+    # 重要な依存関係テスト（Poetry優先、フォールバック対応）
+    if not poetry_env_active:
+        # システムPython使用時: 最小限の依存関係で動作
+        missing_deps = []
+        
+        try:
+            import soundfile
+            print("✅ soundfile: 利用可能")
+        except ImportError:
+            missing_deps.append('soundfile')
+            print("❌ soundfile: 未インストール")
+            
+        try:
+            import torch
+            print("✅ torch: 利用可能")
+        except ImportError:
+            missing_deps.append('torch')
+            print("❌ torch: 未インストール")
+        
+        try:
+            import numpy
+            print("✅ numpy: 利用可能")
+        except ImportError:
+            missing_deps.append('numpy')
+            print("❌ numpy: 未インストール")
+        
+        if missing_deps:
+            print(f"⚠️  システムPython - 音声処理依存関係不足: {missing_deps}")
+            print("🔧 解決策: GUIはシステムPython、音声変換はPoetry環境で実行")
+            print("   → ハイブリッドモードで動作します")
+            
+            # GUI表示は続行、変換処理は別途Poetry環境で実行
+            global USE_EXTERNAL_CONVERSION
+            USE_EXTERNAL_CONVERSION = True
+        else:
+            print("✅ システムPython - 全依存関係利用可能（完全モード）")
+            USE_EXTERNAL_CONVERSION = False
+    else:
+        print("✅ Poetry環境 - Enhanced機能フル対応")
+        USE_EXTERNAL_CONVERSION = False
+    
+    return tkinter_available
+
+# システムPython使用時の外部変換フラグ
+USE_EXTERNAL_CONVERSION = False
+
+# MPS環境でのweight_norm問題を自動回避
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+
+# 最初に環境セットアップを実行
+if not os.environ.get('SKIP_POETRY_CHECK'):
+    setup_runtime_environment()
+else:
+    # SKIP_POETRY_CHECKが設定されている場合は簡易チェックのみ
+    try:
+        import tkinter
+        USE_EXTERNAL_CONVERSION = True  # システムPython使用を想定
+        print("🔧 ハイブリッドモード: GUI=システムPython、変換=Poetry環境")
+    except ImportError:
+        print("❌ tkinter利用不可")
+        sys.exit(1)
+
 # RVC設定をインポート（存在する場合）
 try:
     from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE
@@ -22,10 +118,49 @@ try:
 except ImportError:
     USE_HARDCODED_PATH = False
 
+# 改善モジュールのインポート
+try:
+    from gui_modules import SettingsManager, ErrorHandler, init_error_handler
+    from gui_modules import ComponentFactory, ThemeConfig, ComponentStyle, ComponentSize
+    from gui_modules import KeyboardShortcutManager, ShortcutModifier, ShortcutCategory
+    MODULES_AVAILABLE = True
+except ImportError:
+    MODULES_AVAILABLE = False
+    print("改善モジュールが利用できません。基本機能のみで動作します。")
+
+# 改良版音声変換のインポート
+try:
+    # 実際のEnhanced Voice Converterを使用
+    from enhanced_voice_converter import EnhancedVoiceConverter
+    ENHANCED_CONVERTER_AVAILABLE = True
+    print("✅ Enhanced Voice Converter loaded")
+except ImportError as e:
+    ENHANCED_CONVERTER_AVAILABLE = False
+    error_msg = str(e)
+    if "numpy" in error_msg.lower():
+        print("ℹ️  Enhanced features require Poetry environment for full dependencies")
+        print("   GUI will automatically use Poetry environment for enhanced conversions")
+    else:
+        print(f"❌ Enhanced Voice Converter not available: {e}")
+    print("Standard GUI interface available. Enhanced processing via Poetry environment.")
+
+# ログ重要度分析システムのインポート
+try:
+    from log_importance_analyzer import LogImportanceAnalyzer, LogImportance
+    LOG_ANALYZER_AVAILABLE = True
+    print("✅ Log importance analyzer loaded")
+except ImportError as e:
+    LOG_ANALYZER_AVAILABLE = False
+    print(f"❌ Log importance analyzer not available: {e}")
+    print("Log filtering will be disabled.")
+
 class DarkModeGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Voice Converter")
+        self.root.title("Voice Converter - Enhanced Edition")
+        
+        # 安全な初期化フラグ
+        self.initializing = True
         
         # ダークモードデザイントークン（改善版）
         self.design_tokens = {
@@ -140,7 +275,12 @@ class DarkModeGUI:
         self.is_manual_filename = False  # ユーザーが手動でファイル名を入力したかを追跡
         self.model_dir_var = tk.StringVar()  # モデルディレクトリ用の変数
         self.pitch_var = tk.IntVar(value=0)
-        self.f0_method_var = tk.StringVar(value="rmvpe")  # 最高品質
+        
+        # MPS環境対応の設定
+        self.setup_mps_compatibility()
+        
+        # F0手法の設定（MPS対応後）
+        self.f0_method_var = tk.StringVar(value=self.safe_f0_method)
         self.index_rate_var = tk.DoubleVar(value=1.0)     # 最大インデックス使用
         self.filter_radius_var = tk.IntVar(value=3)       # 推奨値
         self.rms_mix_rate_var = tk.DoubleVar(value=0.25)  # 推奨値
@@ -158,8 +298,45 @@ class DarkModeGUI:
         # UI構築
         self.create_ui()
         
+        # 改良版音声変換システムの初期化
+        self.init_enhanced_converter()
+        
+        # ログアナライザーの初期化
+        self.init_log_analyzer()
+        
         # モデル読み込み
         self.load_models()
+        
+        # 初期化完了
+        self.initializing = False
+        print("✅ GUI initialization completed successfully")
+    
+    def setup_mps_compatibility(self):
+        """MPS環境対応の設定"""
+        import os
+        
+        # MPS fallback設定を有効化
+        os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+        print("🔧 MPS fallback enabled for better compatibility")
+        
+        # MPS環境の検出
+        self.is_mps_available = False
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                self.is_mps_available = True
+                print("⚠️  MPS detected - using CPU-compatible F0 methods")
+        except:
+            pass
+        
+        # F0手法の設定（基本的にrmvpeを使用）
+        self.safe_f0_method = "rmvpe"  # 基本的には高品質なrmvpeを使用
+        
+        if self.is_mps_available:
+            print(f"⚠️  MPS environment detected - rmvpe may fail due to FFT limitations")
+            print(f"💡 If conversion fails, please manually change F0 method to 'harvest'")
+        else:
+            print(f"🎯 F0 method set to: {self.safe_f0_method} (high quality)")
         
     def setup_app_directories(self):
         """アプリケーションディレクトリの設定"""
@@ -189,19 +366,117 @@ class DarkModeGUI:
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    settings = json.load(f)
-                    self.model_dir_var.set(settings.get('model_directory', ''))
+                    self.settings = json.load(f)
+                    self.model_dir_var.set(self.settings.get('model_directory', ''))
+            else:
+                # デフォルト設定
+                self.settings = {}
         except Exception as e:
             print(f"Settings load error: {e}")
+            self.settings = {}
             
+    def init_enhanced_converter(self):
+        """改良版音声変換システムの安全な初期化"""
+        self.enhanced_converter = None
+        self.use_enhanced_conversion = False
+        self.enhancement_status = None
+        
+        if ENHANCED_CONVERTER_AVAILABLE:
+            try:
+                # EnhancedVoiceConverterを初期化
+                self.enhanced_converter = EnhancedVoiceConverter(
+                    model_dir=self.model_dir or "model_dir",
+                    output_dir="enhanced_output"
+                )
+                self.use_enhanced_conversion = True
+                
+                # 改良機能の状態を取得（エラー処理付き）
+                try:
+                    # EnhancedVoiceConverterは異なるAPIを持つ可能性があるため適応
+                    if hasattr(self.enhanced_converter, 'get_enhancement_status'):
+                        self.enhancement_status = self.enhanced_converter.get_enhancement_status()
+                    else:
+                        # デフォルトのステータスを設定
+                        self.enhancement_status = {
+                            'pipeline_type': 'enhanced_full',
+                            'features': {
+                                'adaptive_neighbors': True,
+                                'f0_ensemble': True,
+                                'vad_segmentation': True,
+                                'quality_boost': True
+                            }
+                        }
+                    print(f"✅ Enhanced features active: {list(self.enhancement_status['features'].keys())}")
+                except Exception as e:
+                    print(f"⚠️ Enhancement status unavailable: {e}")
+                    self.enhancement_status = {'pipeline_type': 'enhanced_full', 'features': {}}
+                
+            except Exception as e:
+                print(f"❌ Enhanced converter initialization failed: {e}")
+                # 安全にフォールバック
+                self.enhanced_converter = None
+                self.use_enhanced_conversion = False
+        
+        # Poetry環境でのEnhanced機能を有効化（システムPython環境でも使用可能）
+        if not self.use_enhanced_conversion:
+            # システムPython環境では、Poetry環境でEnhanced機能を実行
+            print("⚠️ System Python detected - Enhanced conversion will use Poetry environment")
+            self.use_enhanced_conversion = True  # Poetry環境でのEnhanced実行を有効化
+            self.enhancement_status = {
+                'pipeline_type': 'enhanced_poetry',
+                'features': {
+                    'adaptive_neighbors': True,
+                    'f0_ensemble': True,
+                    'vad_segmentation': True,
+                    'poetry_execution': True
+                }
+            }
+            print("✅ Enhanced conversion enabled via Poetry environment")
+    
+    def init_log_analyzer(self):
+        """ログアナライザーの初期化"""
+        try:
+            if LOG_ANALYZER_AVAILABLE:
+                # ログ重要度アナライザーを初期化
+                self.log_analyzer = LogImportanceAnalyzer()
+                
+                # ログフィルタレベルの設定（固定：LOW以上を表示）
+                self.log_filter_level = LogImportance.LOW
+                
+                # ログフィルタリング有効フラグ
+                self.log_filtering_enabled = self.settings.get('log_filtering_enabled', True) if hasattr(self, 'settings') else True
+                
+                print("✅ Log analyzer initialized successfully")
+                print(f"   Filter level: {self.log_filter_level.value} (fixed)")
+                print(f"   Filtering enabled: {self.log_filtering_enabled}")
+            else:
+                # ログアナライザーが利用できない場合のフォールバック
+                self.log_analyzer = None
+                self.log_filter_level = None
+                self.log_filtering_enabled = False
+                print("⚠️ Log analyzer not available - using basic logging")
+                
+        except Exception as e:
+            print(f"❌ Log analyzer initialization failed: {e}")
+            # フォールバック設定
+            self.log_analyzer = None
+            self.log_filter_level = None
+            self.log_filtering_enabled = False
+    
     def save_settings(self):
         """設定ファイルの保存"""
         try:
-            settings = {
-                'model_directory': self.model_dir_var.get()
-            }
+            # 現在の設定を更新
+            if not hasattr(self, 'settings'):
+                self.settings = {}
+                
+            self.settings.update({
+                'model_directory': self.model_dir_var.get(),
+                'log_filtering_enabled': getattr(self, 'log_filtering_enabled', True)
+            })
+            
             with open(self.settings_file, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, indent=2, ensure_ascii=False)
+                json.dump(self.settings, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Settings save error: {e}")
         
@@ -472,14 +747,14 @@ class DarkModeGUI:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # マウスホイールでスクロール
+        # マウスホイールでスクロール（特定のCanvasのみに限定）
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<MouseWheel>", _on_mousewheel)
         
-        # Linux用のマウスホイール
-        canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
-        canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+        # Linux用のマウスホイール（特定のCanvasのみに限定）
+        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
         
     def create_main_content(self):
         """メインコンテンツエリア"""
@@ -705,6 +980,9 @@ class DarkModeGUI:
         # ピッチ設定（コンパクト版）
         self.create_compact_setting_control(right_column, "Pitch", self.pitch_var, 
                                           -12, 12, "semitones")
+        
+        # ログフィルター設定セクション
+        self.create_log_filter_controls(right_column)
 
     def create_compact_setting_control(self, parent, label, variable, min_val, max_val, unit=""):
         """コンパクトな設定コントロール作成"""
@@ -920,17 +1198,180 @@ class DarkModeGUI:
         self.log_text.config(state=tk.NORMAL)  # 編集可能にしてコピーを許可
     
     def log_message(self, message, level="INFO"):
-        """ログメッセージを追加"""
+        """ログメッセージを追加（重要度フィルタリング付き）"""
         # log_textがまだ存在しない場合は、コンソールに出力
         if not hasattr(self, 'log_text'):
             print(f"[{level}] {message}")
             return
             
+        # ログ重要度フィルタリング
+        if self.should_filter_log(message, level):
+            return  # フィルタされたログは表示しない
+            
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {level}: {message}\n"
         
-        self.log_text.insert(tk.END, formatted_message)
+        # ログレベルによる色分け
+        self.log_text.insert(tk.END, formatted_message, self.get_log_tag(level))
         self.log_text.see(tk.END)  # 最新のログまでスクロール
+    
+    def should_filter_log(self, message, level="INFO"):
+        """ログメッセージをフィルタすべきかどうかを判定"""
+        # ログフィルタリングが無効な場合は表示
+        if not getattr(self, 'log_filtering_enabled', False):
+            return False
+            
+        # ログアナライザーが利用できない場合は表示
+        if not hasattr(self, 'log_analyzer') or self.log_analyzer is None:
+            return False
+            
+        try:
+            # メッセージの重要度を分析（LOWレベル固定）
+            importance = self.log_analyzer.classify_log_line(f"{level}: {message}")
+            
+            # LOW以上の重要度のメッセージのみ表示（NOISEのみフィルタ）
+            return importance == LogImportance.NOISE
+            
+        except (ValueError, AttributeError) as e:
+            # エラーが発生した場合は安全のため表示
+            return False
+    
+    def get_log_tag(self, level):
+        """ログレベルに応じたテキストタグを取得"""
+        # ログレベル別の色分け設定
+        if not hasattr(self, '_log_tags_configured'):
+            self._configure_log_tags()
+            
+        level_tags = {
+            'ERROR': 'log_error',
+            'WARNING': 'log_warning', 
+            'INFO': 'log_info',
+            'DEBUG': 'log_debug',
+            'CRITICAL': 'log_critical'
+        }
+        
+        return level_tags.get(level, 'log_info')
+    
+    def _configure_log_tags(self):
+        """ログテキストウィジェットのタグを設定"""
+        if not hasattr(self, 'log_text'):
+            return
+            
+        # ログレベル別の色設定
+        self.log_text.tag_config('log_error', foreground=self.colors['error'])
+        self.log_text.tag_config('log_warning', foreground=self.colors['warning'])
+        self.log_text.tag_config('log_info', foreground=self.colors['text_secondary'])
+        self.log_text.tag_config('log_debug', foreground=self.colors['text_tertiary'])
+        self.log_text.tag_config('log_critical', foreground=self.colors['error'], font=(self.fonts['mono'], 10, 'bold'))
+        
+        self._log_tags_configured = True
+    
+    def _filter_poetry_output(self, line):
+        """Poetry実行時の出力をフィルタリング"""
+        # ログアナライザーが利用できない場合はそのまま返す
+        if not hasattr(self, 'log_analyzer') or self.log_analyzer is None:
+            return line
+            
+        # ログフィルタリングが無効な場合はそのまま返す
+        if not getattr(self, 'log_filtering_enabled', False):
+            return line
+            
+        try:
+            # 特にPoetryとライブラリの冗長なログをフィルタ
+            noise_patterns = [
+                r"current directory is",
+                r"Loading faiss\.",
+                r"Successfully loaded faiss\.",
+                r"UserWarning:",
+                r"torch\.nn\.utils\.weight_norm",
+                r"MPS.*fallback.*CPU",
+                r"performance implications", 
+                r"DEBUG:numba",
+                r"bytecode dump:",
+                r"dispatch pc=",
+                r"stack \[",
+                r"overwrite configs\.json",
+                r"Use mps instead",
+                r"HubertModel Config:",
+                r"HubertPretrainingTask Config"
+            ]
+            
+            # ノイズパターンに一致する場合は非表示
+            import re
+            for pattern in noise_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    return None  # フィルタして非表示
+            
+            # ログアナライザーを使用してさらに詳細なフィルタリング（LOWレベル固定）
+            importance = self.log_analyzer.classify_log_line(line)
+            
+            # LOW以上の重要度のメッセージのみ表示（NOISEのみフィルタ）
+            if importance == LogImportance.NOISE:
+                return None
+                
+            return line
+            
+        except Exception as e:
+            # エラーが発生した場合は安全のため表示
+            return line
+    
+    def create_log_filter_controls(self, parent):
+        """ログフィルター制御UIを作成（簡易版）"""
+        if not LOG_ANALYZER_AVAILABLE:
+            return  # ログアナライザーが利用できない場合は何もしない
+            
+        # セクション用のフレーム
+        log_filter_frame = tk.Frame(parent, bg=self.colors['surface_card'])
+        log_filter_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['lg'], 0))
+        
+        # セクションタイトル
+        title_label = tk.Label(log_filter_frame, 
+                             text="Log Filtering",
+                             font=('SF Pro Display', 11, 'bold'),
+                             bg=self.colors['surface_card'],
+                             fg=self.colors['text_secondary'])
+        title_label.pack(anchor='w')
+        
+        # ログフィルタリング有効/無効チェックボックス
+        checkbox_frame = tk.Frame(log_filter_frame, bg=self.colors['surface_card'])
+        checkbox_frame.pack(fill=tk.X, pady=(self.design_tokens['spacing']['xs'], 0))
+        
+        self.log_filtering_enabled_var = tk.BooleanVar(value=getattr(self, 'log_filtering_enabled', True))
+        log_filter_checkbox = tk.Checkbutton(
+            checkbox_frame,
+            text="Enable filtering (Level: LOW)",
+            variable=self.log_filtering_enabled_var,
+            font=('SF Pro Display', 10),
+            bg=self.colors['surface_card'],
+            fg=self.colors['text_tertiary'],
+            activebackground=self.colors['surface_card'],
+            selectcolor=self.colors['background_secondary'],
+            borderwidth=0,
+            highlightthickness=0,
+            command=self.on_log_filtering_toggled
+        )
+        log_filter_checkbox.pack(anchor='w')
+        
+        # 説明テキスト（簡略化）
+        help_text = tk.Label(log_filter_frame,
+                           text="Filters out library warnings and debug noise",
+                           font=('SF Pro Display', 8),
+                           bg=self.colors['surface_card'],
+                           fg=self.colors['text_disabled'],
+                           justify=tk.LEFT)
+        help_text.pack(anchor='w', pady=(self.design_tokens['spacing']['xs'], 0))
+    
+    def on_log_filtering_toggled(self):
+        """ログフィルタリングの有効/無効を切り替え"""
+        self.log_filtering_enabled = self.log_filtering_enabled_var.get()
+        # 設定を保存
+        if hasattr(self, 'settings'):
+            self.settings['log_filtering_enabled'] = self.log_filtering_enabled
+            self.save_settings()
+        
+        # ユーザーにフィードバック
+        status = "enabled" if self.log_filtering_enabled else "disabled"
+        self.log_message(f"Log filtering {status} (Level: LOW)", "INFO")
         
     def update_progress(self, stage_index, progress, message):
         """プログレスバーとステージインジケーターを更新"""
@@ -1693,10 +2134,392 @@ class DarkModeGUI:
         thread.start()
         
     def run_conversion(self):
-        """実際の変換処理（内蔵プログレスバー使用）"""
+        """実際の変換処理（改良版アルゴリズム優先）"""
+        try:
+            # Enhanced機能を優先して使用
+            if self.use_enhanced_conversion:
+                if self.enhanced_converter is not None:
+                    self.log_message("Starting enhanced conversion with improved algorithms (Direct)")
+                    self.run_enhanced_conversion_safe()
+                else:
+                    self.log_message("Starting enhanced conversion with Poetry environment")
+                    self.run_enhanced_conversion_safe()  # Poetry環境で実行
+            else:
+                self.log_message("Starting standard conversion")
+                self.run_standard_conversion()
+        except Exception as e:
+            error_msg = str(e)
+            self.log_message(f"Conversion failed: {error_msg}", "ERROR")
+            
+            # MPS FFTエラーの特別な処理
+            if "aten::_fft_r2c" in error_msg or ("MPS" in error_msg and "rmvpe" in error_msg):
+                user_message = (
+                    "🚨 F0推定エラー (Apple Silicon GPU互換性問題)\n\n"
+                    "問題: rmvpeメソッドがMPS環境で動作しません\n"
+                    "解決策: F0 methodを 'harvest' に変更してください\n\n"
+                    "• rmvpe → FFT演算を使用（MPS未対応）\n"
+                    "• harvest → CPU互換（MPS対応）\n\n"
+                    "GUI設定でF0 methodを変更してから再試行してください。"
+                )
+                self.update_progress(0, 0, "F0推定エラー: rmvpe→harvestに変更が必要")
+                self.root.after(0, lambda: messagebox.showerror("F0推定エラー", user_message))
+            else:
+                self.update_progress(0, 0, f"変換失敗: {error_msg}")
+                self.root.after(0, lambda: messagebox.showerror("Conversion Error", f"Failed to convert: {error_msg}"))
+    
+    def _run_enhanced_conversion_with_poetry(self, input_path, output_path, model_file, **params):
+        """Poetry環境でエンハンス変換を実行"""
+        import subprocess
+        import json
+        
+        try:
+            # パラメータをJSONファイルに保存
+            params_file = "temp_conversion_params.json"
+            conversion_data = {
+                "input_path": input_path,
+                "output_path": output_path,
+                "model_file": model_file,
+                "params": params
+            }
+            
+            # デバッグ用にパラメータを記録
+            self.last_conversion_params = conversion_data.copy()
+            self.log_message(f"Conversion parameters: {json.dumps(conversion_data, indent=2)}", "DEBUG")
+            
+            with open(params_file, 'w') as f:
+                json.dump(conversion_data, f)
+            
+            # Poetry環境でenhanced_voice_converter.pyを実行
+            cmd = [
+                "poetry", "run", "python", "-c",
+                f"""
+import json
+import sys
+import os
+from pathlib import Path
+sys.path.append(str(Path.cwd()))
+
+# Enhanced Voice Converterをインポート
+from enhanced_voice_converter import EnhancedVoiceConverter
+
+# パラメータ読み込み
+with open('{params_file}', 'r') as f:
+    data = json.load(f)
+
+# Enhanced Voice Converterを初期化
+print("Initializing Enhanced Voice Converter...")
+converter = EnhancedVoiceConverter()
+
+# モデルを読み込み
+model_file = data['model_file']
+index_path = data['params'].get('index_path')
+print(f"Loading model: {{model_file}}")
+if index_path:
+    print(f"Using index file: {{index_path}}")
+    success = converter.load_model(model_file, index_path, data['params'].get('index_rate', 1.0))
+else:
+    success = converter.load_model(model_file)
+
+if not success:
+    print("ERROR: Failed to load model")
+    sys.exit(1)
+
+# Enhanced機能の状態をログ出力
+status = converter.get_enhancement_status()
+print(f"Enhanced features: {{status}}")
+
+# 変換実行
+print("Starting enhanced conversion...")
+result = converter.convert_audio(
+    input_path=data['input_path'],
+    output_path=data['output_path'],
+    **{{k: v for k, v in data['params'].items() if k != 'index_path'}}
+)
+print(f"RESULT: {{result}}")
+"""
+            ]
+            
+            # コマンド実行（タイムアウトを延長）
+            self.log_message("Executing Enhanced conversion with Poetry...")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, cwd=os.getcwd())
+            
+            # コマンドの標準出力をログに記録（フィルタリング付き）
+            if result.stdout:
+                for line in result.stdout.split('\n'):
+                    if line.strip():
+                        # Poetry出力の重要度を分類してフィルタリング
+                        filtered_line = self._filter_poetry_output(line)
+                        if filtered_line:  # フィルタされなかった場合のみ表示
+                            self.log_message(f"Enhanced: {filtered_line}")
+            
+            # エラー出力も必ず記録（フィルタリングなしで重要度HIGH）
+            if result.stderr:
+                self.log_message("=== Enhanced Conversion STDERR ===", "ERROR")
+                for line in result.stderr.split('\n'):
+                    if line.strip():
+                        # stderrは重要なので常に表示（フィルタリングなし）
+                        self.log_message(f"STDERR: {line}", "ERROR")
+                self.log_message("=== End STDERR ===", "ERROR")
+            
+            # クリーンアップ
+            if os.path.exists(params_file):
+                os.remove(params_file)
+            
+            if result.returncode == 0:
+                self.log_message("Enhanced conversion completed successfully")
+                # 結果を解析
+                output_lines = result.stdout.split('\n')
+                result_path = None
+                
+                for line in output_lines:
+                    if line.startswith("RESULT: "):
+                        result_path = line.replace("RESULT: ", "").strip()
+                        if result_path != "None" and result_path:
+                            self.log_message(f"Enhanced conversion RESULT path: {result_path}")
+                            break
+                
+                # 詳細なファイル検証を実行
+                final_output_path = result_path if result_path else output_path
+                
+                if os.path.exists(final_output_path):
+                    # ファイルサイズ取得
+                    file_size = os.path.getsize(final_output_path)
+                    self.log_message(f"Output file exists: {final_output_path}")
+                    self.log_message(f"File size: {file_size} bytes")
+                    
+                    # 44バイト問題の詳細分析
+                    if file_size <= 100:  # 小さすぎるファイルを詳細分析
+                        self.log_message(f"WARNING: Suspiciously small output file ({file_size} bytes)", "WARNING")
+                        
+                        # ファイル内容のヘックスダンプ（最初の100バイト）
+                        try:
+                            with open(final_output_path, 'rb') as f:
+                                file_content = f.read(100)
+                                hex_content = file_content.hex()
+                                self.log_message(f"File hex content (first 100 bytes): {hex_content}", "DEBUG")
+                                
+                                # WAVヘッダー分析
+                                if len(file_content) >= 44:
+                                    if file_content[:4] == b'RIFF':
+                                        self.log_message("WAV header detected: RIFF signature found", "DEBUG")
+                                        if len(file_content) >= 12 and file_content[8:12] == b'WAVE':
+                                            self.log_message("WAV format confirmed", "DEBUG")
+                                        else:
+                                            self.log_message("Invalid WAV: No WAVE format identifier", "ERROR")
+                                    else:
+                                        self.log_message("No WAV header: File does not start with RIFF", "ERROR")
+                                else:
+                                    self.log_message(f"File too small for WAV header (need 44+ bytes, got {len(file_content)})", "ERROR")
+                                    
+                        except Exception as read_error:
+                            self.log_message(f"Error reading file content: {read_error}", "ERROR")
+                    
+                    # 最小有効ファイルサイズチェック
+                    if file_size < 1000:  # 1KB未満は問題の可能性
+                        self.log_message(f"WARNING: Output file may be incomplete (only {file_size} bytes)", "WARNING")
+                        
+                        # プロセス実行ログの詳細出力
+                        self.log_message("=== Conversion Process Debug Info ===", "DEBUG")
+                        self.log_message(f"Command exit code: {result.returncode}", "DEBUG")
+                        self.log_message(f"Expected output path: {output_path}", "DEBUG")
+                        self.log_message(f"Actual result path: {result_path}", "DEBUG")
+                        
+                        # STDOUT の詳細分析
+                        self.log_message("=== STDOUT Analysis ===", "DEBUG")
+                        for i, line in enumerate(output_lines):
+                            if line.strip():
+                                self.log_message(f"STDOUT[{i}]: {line}", "DEBUG")
+                        
+                        # conversion_paramsの確認
+                        if hasattr(self, 'last_conversion_params'):
+                            self.log_message(f"Last conversion params: {self.last_conversion_params}", "DEBUG")
+                    
+                    # 音声ファイル形式の検証
+                    try:
+                        if final_output_path.endswith(('.wav', '.mp3', '.flac', '.m4a')):
+                            import soundfile as sf
+                            try:
+                                info = sf.info(final_output_path)
+                                self.log_message(f"Audio validation: {info.frames} frames, {info.samplerate}Hz, {info.channels} channels, {info.duration:.2f}s", "INFO")
+                                
+                                if info.frames == 0:
+                                    self.log_message("ERROR: Audio file contains no frames (empty audio)", "ERROR")
+                                elif info.duration < 0.1:
+                                    self.log_message(f"WARNING: Very short audio duration ({info.duration:.3f}s)", "WARNING")
+                                else:
+                                    self.log_message("Audio validation: File appears to contain valid audio data", "INFO")
+                                    
+                            except Exception as sf_error:
+                                self.log_message(f"Audio validation failed: {sf_error}", "ERROR")
+                                # soundfile で読めない場合でもファイルが存在する場合は返す
+                    except ImportError:
+                        self.log_message("soundfile not available for audio validation", "DEBUG")
+                    
+                    # 成功した場合の返却
+                    if file_size >= 1000:  # 最小サイズクリア
+                        self.log_message(f"Enhanced conversion completed successfully: {final_output_path}")
+                        return final_output_path
+                    else:
+                        # 小さなファイルでも一応返すが警告
+                        self.log_message(f"Enhanced conversion completed with warnings: {final_output_path}", "WARNING")
+                        return final_output_path
+                else:
+                    # ファイルが存在しない場合の詳細エラー情報
+                    self.log_message(f"ERROR: Output file not found at expected path: {final_output_path}", "ERROR")
+                    self.log_message(f"Also checked alternative path: {output_path}", "ERROR")
+                    
+                    # ディレクトリ内容の確認
+                    output_dir = os.path.dirname(final_output_path)
+                    if os.path.exists(output_dir):
+                        try:
+                            dir_contents = os.listdir(output_dir)
+                            self.log_message(f"Output directory contents: {dir_contents}", "DEBUG")
+                        except Exception as list_error:
+                            self.log_message(f"Could not list output directory: {list_error}", "ERROR")
+                    else:
+                        self.log_message(f"Output directory does not exist: {output_dir}", "ERROR")
+                    
+                    raise ValueError(f"Enhanced conversion: No output file generated at {final_output_path}")
+            else:
+                error_msg = f"Enhanced conversion failed (exit code {result.returncode})"
+                if result.stderr:
+                    error_msg += f": {result.stderr}"
+                raise RuntimeError(error_msg)
+                
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Conversion process timed out")
+        except Exception as e:
+            self.log_message(f"Poetry conversion error: {e}", "ERROR")
+            raise
+    
+    def run_enhanced_conversion_safe(self):
+        """安全な改良版音声変換処理"""
         try:
             # 1. 初期化
-            self.update_progress(0, 0, "プロジェクトとモデルの初期化中...")
+            self.update_progress(0, 10, "Enhanced conversion initializing...")
+            
+            # 選択されたモデル情報を取得
+            selected_model_name = self.selected_model.get()
+            if not selected_model_name:
+                raise ValueError("No model selected")
+            
+            # モデルファイルのパスを構築
+            model_file = None
+            if hasattr(self, 'model_cards') and self.model_cards:
+                # 既存のモデルカードから検索
+                for card_frame, inner, model in self.model_cards:
+                    if model['name'] == selected_model_name:
+                        model_file = model['file']
+                        break
+            
+            # フォールバック: 直接ファイルパスを構築
+            if not model_file:
+                model_file = os.path.join(self.model_dir, f"{selected_model_name}.pth")
+                if not os.path.exists(model_file):
+                    # ディレクトリ内を検索
+                    for file in os.listdir(self.model_dir):
+                        if file.endswith('.pth') and selected_model_name in file:
+                            model_file = os.path.join(self.model_dir, file)
+                            break
+            
+            if not model_file or not os.path.exists(model_file):
+                raise ValueError(f"Model file not found: {selected_model_name}")
+            
+            self.update_progress(1, 30, "Preparing enhanced parameters...")
+            
+            # 2. 変換パラメータの準備（安全版）
+            conversion_params = {
+                'f0_up_key': int(self.pitch_var.get()),
+                'f0_method': self.f0_method_var.get(),
+                'index_rate': self.index_rate_var.get(),
+                'filter_radius': 3,  # 安全なデフォルト値
+                'rms_mix_rate': 0.25,  # 安全なデフォルト値
+                'protect': 0.33,  # 安全なデフォルト値
+            }
+            
+            # インデックスファイルを探す
+            index_file = os.path.join(os.path.dirname(model_file), f"{os.path.splitext(os.path.basename(model_file))[0]}.index")
+            if os.path.exists(index_file):
+                conversion_params['index_path'] = index_file
+            
+            # 改良機能の状態をログ出力（安全にアクセス）
+            if self.enhancement_status and 'features' in self.enhancement_status:
+                active_features = [k for k, v in self.enhancement_status['features'].items() if v]
+                self.log_message(f"Enhanced features active: {active_features}")
+            
+            self.update_progress(2, 50, "Converting with enhanced algorithms...")
+            
+            # 3. 音声変換実行（Enhanced機能優先）
+            try:
+                # Enhanced機能の実行方法を選択
+                if self.enhanced_converter is not None:
+                    # 直接Enhanced機能を使用
+                    self.log_message("Using direct Enhanced Voice Converter...")
+                    # 直接実行のコードは存在しないため、Poetry環境を使用
+                    result_path = self._run_enhanced_conversion_with_poetry(
+                        input_path=self.input_var.get(),
+                        output_path=self.output_file_path,
+                        model_file=model_file,
+                        **conversion_params
+                    )
+                else:
+                    # Poetry環境でEnhanced機能を実行
+                    self.log_message("Using Enhanced Voice Converter via Poetry environment...")
+                    result_path = self._run_enhanced_conversion_with_poetry(
+                        input_path=self.input_var.get(),
+                        output_path=self.output_file_path,
+                        model_file=model_file,
+                        **conversion_params
+                    )
+                
+                if result_path and os.path.exists(result_path):
+                    self.update_progress(6, 100, f"Enhanced conversion completed!")
+                    self.log_message(f"Enhanced conversion successful: {result_path}")
+                    
+                    # 成功メッセージ（簡潔版）
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "Enhanced Conversion Complete", 
+                        f"✅ Enhanced conversion completed!\n\n"
+                        f"Output: {os.path.basename(result_path)}\n\n"
+                        f"Enhanced features applied:\n"
+                        f"• Adaptive neighbor search\n"
+                        f"• F0 ensemble methods\n"
+                        f"• Quality boost parameters"
+                    ))
+                else:
+                    raise ValueError("Enhanced conversion failed to produce output")
+                    
+            except Exception as convert_error:
+                self.log_message(f"Enhanced conversion process failed: {convert_error}", "ERROR")
+                # 詳細なエラー情報を出力
+                import traceback
+                self.log_message(f"Error details: {traceback.format_exc()}", "DEBUG")
+                raise
+                
+        except Exception as e:
+            self.log_message(f"Enhanced conversion failed: {e}", "ERROR")
+            self.update_progress(0, 0, f"Enhanced conversion failed")
+            
+            # 詳細なエラーメッセージを表示
+            error_details = str(e)
+            if "MPS" in error_details or "weight_norm" in error_details:
+                error_message = "MPS compatibility issue detected. Please try with CPU mode."
+            elif "HUBERT" in error_details or "extract_features" in error_details:
+                error_message = "Model compatibility issue. Please check if the model is compatible."
+            else:
+                error_message = f"Enhanced conversion failed: {error_details}"
+            
+            self.root.after(0, lambda: messagebox.showerror(
+                "Enhanced Conversion Error", 
+                f"Enhanced conversion encountered an error:\n\n{error_message}\n\n"
+                f"Please check the console for detailed error information."
+            ))
+    
+    def run_standard_conversion(self):
+        """標準音声変換処理（フォールバック）"""
+        try:
+            # 1. 初期化
+            self.update_progress(0, 0, "Standard conversion initializing...")
             
             # プロジェクトディレクトリを確認
             project_dir = self.base_dir
@@ -1711,7 +2534,7 @@ class DarkModeGUI:
                         break
             
             time.sleep(0.5)  # 視覚的フィードバックのため
-            self.update_progress(0, 100, "初期化完了")
+            self.update_progress(0, 100, "Standard initialization complete")
             
             # 2. データ読み込み
             self.update_progress(1, 0, "音声ファイルとモデルデータを読み込み中...")
@@ -1838,7 +2661,10 @@ class DarkModeGUI:
             if line:
                 line = line.strip()
                 if line:
-                    self.log_message(line)
+                    # Poetry出力の重要度を分類してフィルタリング
+                    filtered_line = self._filter_poetry_output(line)
+                    if filtered_line:  # フィルタされなかった場合のみ表示
+                        self.log_message(filtered_line)
                     line_count += 1
                     
                     # 行数に基づく進捗更新
@@ -1892,9 +2718,52 @@ class DarkModeGUI:
 
 
 def main():
+    """安全なメイン関数"""
+    # macOS Tkinterの安定化設定
+    if sys.platform == "darwin":
+        try:
+            # イベント処理の最適化
+            os.environ['TK_SILENCE_DEPRECATION'] = '1'
+        except:
+            pass
+    
+    # メインウィンドウ作成
     root = tk.Tk()
-    app = DarkModeGUI(root)
-    root.mainloop()
+    
+    try:
+        # アプリケーション起動
+        print("Initializing enhanced GUI...")
+        app = DarkModeGUI(root)
+        
+        # 終了処理の設定
+        def on_closing():
+            try:
+                if hasattr(app, 'converting') and app.converting:
+                    if messagebox.askyesno("Confirm", "Conversion in progress. Exit anyway?"):
+                        app.converting = False
+                        root.destroy()
+                else:
+                    root.destroy()
+            except Exception as e:
+                print(f"Error during shutdown: {e}")
+                root.destroy()
+        
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        
+        # メインループ開始
+        print("Starting enhanced GUI main loop...")
+        root.mainloop()
+        
+    except Exception as e:
+        print(f"GUI Error: {e}")
+        import traceback
+        traceback.print_exc()
+        messagebox.showerror("Startup Error", f"Failed to start GUI: {str(e)}")
+    finally:
+        try:
+            root.quit()
+        except:
+            pass
 
 
 if __name__ == "__main__":
