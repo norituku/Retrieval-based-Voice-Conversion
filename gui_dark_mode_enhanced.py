@@ -269,6 +269,7 @@ class DarkModeGUI:
         # 変数の初期化（setup_app_directories()より前に実行）
         self.model_info = {}
         self.selected_model = tk.StringVar()
+        self.selected_model_clean_name = ""  # ファイル名用の純粋なモデル名
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
         self.output_filename_var = tk.StringVar()  # 出力ファイル名用の変数
@@ -1266,6 +1267,36 @@ class DarkModeGUI:
         
         self._log_tags_configured = True
     
+    def _normalize_log_for_dedup(self, line):
+        """ログメッセージを正規化して重複判定用に変換"""
+        import re
+        
+        # タイムスタンプ、パス、数値、セッション固有情報を除去
+        normalized = line
+        
+        # タイムスタンプ除去 (例: [10:01:36], 2025-01-01 など)
+        normalized = re.sub(r'\[\d{2}:\d{2}:\d{2}\]', '[TIME]', normalized)
+        normalized = re.sub(r'\d{4}-\d{2}-\d{2}', 'DATE', normalized)
+        
+        # ファイルパス除去 (例: /Users/... を PATH に)
+        normalized = re.sub(r'/[^\s]*/', 'PATH/', normalized)
+        
+        # 数値パラメータを正規化 (例: shape=(3476800,) を shape=(NUM,) に)
+        normalized = re.sub(r'\d+', 'NUM', normalized)
+        
+        # プロセスID、メモリアドレスなど除去
+        normalized = re.sub(r'0x[0-9a-fA-F]+', 'ADDR', normalized)
+        
+        # torch.Size表記の正規化
+        normalized = re.sub(r'torch\.Size\([^)]+\)', 'torch.Size(SHAPE)', normalized)
+        
+        # パフォーマンス数値の正規化
+        normalized = re.sub(r'\d+\.\d+s', 'NUM.NUMs', normalized)
+        normalized = re.sub(r'max=\d+\.\d+', 'max=NUM.NUM', normalized)
+        normalized = re.sub(r'min=[-]?\d+\.\d+', 'min=NUM.NUM', normalized)
+        
+        return normalized.strip()
+    
     def _filter_poetry_output(self, line):
         """Poetry実行時の出力をフィルタリング"""
         # ログアナライザーが利用できない場合はそのまま返す
@@ -1296,32 +1327,65 @@ class DarkModeGUI:
                 if re.search(pattern, line, re.IGNORECASE):
                     return line  # 重要な進行状況は表示
             
-            # 詳細なデバッグログはフィルタ
+            # 詳細なデバッグログはフィルタ（拡張版）
             debug_noise_patterns = [
+                # Enhanced Pipeline デバッグ
                 r"DEBUG:.*Before size adjustment",
                 r"DEBUG:.*Pitch shapes:",
                 r"DEBUG:.*Adjusted pitch to",
                 r"DEBUG:.*Adaptive search:",
+                r"DEBUG:.*✅ Protect processing completed",
+                
+                # RVC内部処理
                 r"current directory is",
                 r"Loading faiss\.",
                 r"Successfully loaded faiss\.",
+                r"\[DEBUG.*\].*Attempting to load",
+                r"Final.*SR.*for output:",
+                r"Selected Synthesizer:",
+                r"Model weights loaded from checkpoint",
+                r"Synthesizer initialized and model loaded",
+                r"Faiss index loaded successfully",
+                r"Pipeline initialized successfully",
+                
+                # PyTorch/MPS関連
                 r"UserWarning:",
                 r"torch\.nn\.utils\.weight_norm",
                 r"MPS.*fallback.*CPU",
-                r"performance implications", 
+                r"performance implications",
+                r"overwrite configs\.json",
+                r"Use mps instead",
+                r"is_half:.*device:",
+                r"No supported Nvidia GPU found",
+                
+                # Fairseq/Hubert関連
+                r"HubertModel Config:",
+                r"HubertPretrainingTask Config:",
+                r"Hubert model loaded successfully",
+                r"Input audio will be resampled",
+                r"Loading input audio from:",
+                
+                # 数値統計（冗長）
+                r"Stats.*min=.*max=.*mean=",
+                r"Input audio loaded\. Shape:",
+                r"f0 estimation completed\.",
+                r"Pitch.*Shape=.*Dtype=",
+                
+                # Numba関連
                 r"DEBUG:numba",
                 r"bytecode dump:",
                 r"dispatch pc=",
                 r"stack \[",
-                r"overwrite configs\.json",
-                r"Use mps instead",
-                r"HubertModel Config:",
-                r"HubertPretrainingTask Config",
-                r"Stats.*min=.*max=.*mean=",
-                r"\[DEBUG.*\].*Attempting to load",
-                r"Final.*SR.*for output:",
-                r"Selected Synthesizer:",
-                r"Model weights loaded from checkpoint"
+                r"pending: deque",
+                r"end state\. edges=",
+                
+                # 繰り返しの多い技術詳細
+                r"Pipeline Args Overview:",
+                r"Pipeline internal index_path:",
+                r"Calling self\.pipeline\.pipeline",
+                r"Returned processing times:",
+                r"VC\.vc_inference.*START",
+                r"VC\.vc_inference.*END"
             ]
             
             # デバッグノイズパターンに一致する場合は非表示
@@ -1756,6 +1820,7 @@ class DarkModeGUI:
                         
                         models.append({
                             'name': f"{model_name} ({relative_path})" if relative_path != '.' else model_name,
+                            'clean_name': model_name,  # ファイル名用の純粋なモデル名
                             'file': os.path.join(root, model_file),
                             'config': params_file,
                             'folder': os.path.basename(root),
@@ -1783,6 +1848,7 @@ class DarkModeGUI:
                     
                     models.append({
                         'name': full_name,
+                        'clean_name': model_name,  # ファイル名用の純粋なモデル名
                         'file': os.path.join(root, pth_file),
                         'config': None,
                         'folder': None,
@@ -1865,6 +1931,7 @@ class DarkModeGUI:
         # クリック可能にする
         def select_model():
             self.selected_model.set(model['name'])
+            self.selected_model_clean_name = model.get('clean_name', model['name'])  # ファイル名用の純粋な名前を保存
             self.on_model_selected(model)
             # 選択状態の視覚的フィードバック
             self.update_model_selection(card_frame)
@@ -1938,7 +2005,7 @@ class DarkModeGUI:
             # 自動生成プレビュー（入力ファイル名+モデル名ベース）
             elif self.input_var.get() and self.selected_model.get():
                 input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
-                safe_model_name = self.selected_model.get()
+                safe_model_name = self.selected_model_clean_name or self.selected_model.get()
                 for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                     safe_model_name = safe_model_name.replace(char, '_')
                 safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
@@ -1946,7 +2013,7 @@ class DarkModeGUI:
                 preview_name = f"Auto: {input_name}_{safe_model_name}.wav"
                 self.output_preview_label.config(text=preview_name, fg=self.colors['text_tertiary'])
             elif self.selected_model.get():
-                safe_model_name = self.selected_model.get()
+                safe_model_name = self.selected_model_clean_name or self.selected_model.get()
                 for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                     safe_model_name = safe_model_name.replace(char, '_')
                 safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
@@ -1961,7 +2028,7 @@ class DarkModeGUI:
             if not self.is_manual_filename:
                 if self.input_var.get() and self.selected_model.get():
                     input_name = os.path.splitext(os.path.basename(self.input_var.get()))[0]
-                    safe_model_name = self.selected_model.get()
+                    safe_model_name = self.selected_model_clean_name or self.selected_model.get()
                     for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                         safe_model_name = safe_model_name.replace(char, '_')
                     safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
@@ -1975,7 +2042,7 @@ class DarkModeGUI:
                     self.output_filename_var.set(input_name)
                 elif not self.input_var.get() and self.selected_model.get():
                     # モデルのみ選択されている場合
-                    safe_model_name = self.selected_model.get()
+                    safe_model_name = self.selected_model_clean_name or self.selected_model.get()
                     for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                         safe_model_name = safe_model_name.replace(char, '_')
                     safe_model_name = '_'.join(filter(None, safe_model_name.split('_')))
@@ -2126,8 +2193,8 @@ class DarkModeGUI:
             input_file = self.input_var.get()
             input_name = os.path.splitext(os.path.basename(input_file))[0]
             
-            # モデル名から安全なファイル名を作成（特殊文字を除去）
-            safe_model_name = self.selected_model.get()
+            # モデル名から安全なファイル名を作成（純粋なモデル名を使用）
+            safe_model_name = self.selected_model_clean_name or self.selected_model.get()
             # ファイル名に使えない文字を置換
             for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '\n', '\r', '\t']:
                 safe_model_name = safe_model_name.replace(char, '_')
@@ -2280,32 +2347,52 @@ print(f"RESULT: {{result}}")
                         if filtered_line:  # フィルタされなかった場合のみ表示
                             self.log_message(f"Enhanced: {filtered_line}")
             
-            # STDERR出力を適切に分類して処理
+            # STDERR出力を適切に分類して処理（重複削減版）
             if result.stderr:
                 stderr_lines = result.stderr.split('\n')
                 actual_errors = []
-                info_logs = []
+                important_info = []
+                seen_messages = set()  # 重複チェック用
+                
+                # 要約カウンター
+                filtered_debug_count = 0
+                filtered_noise_count = 0
                 
                 for line in stderr_lines:
                     if line.strip():
+                        # 重複チェック（同じメッセージの繰り返しを防ぐ）
+                        # タイムスタンプやセッション固有の情報を除去して重複判定
+                        normalized_line = self._normalize_log_for_dedup(line)
+                        if normalized_line in seen_messages:
+                            continue
+                        seen_messages.add(normalized_line)
+                        
                         # ログレベルに基づいて分類
                         if any(level in line for level in ["ERROR:", "CRITICAL:", "FATAL:"]):
                             actual_errors.append(line)
                         elif any(level in line for level in ["WARNING:", "WARN:"]):
-                            # 警告は適切なレベルで表示
+                            # 警告は適切なレベルで表示（フィルタリング後）
                             filtered_line = self._filter_poetry_output(line)
                             if filtered_line:
                                 self.log_message(f"Enhanced: {filtered_line}", "WARNING")
                         elif any(level in line for level in ["INFO:", "DEBUG:"]):
-                            # 情報ログは通常ログとして処理
+                            # 情報ログをフィルタリング
                             filtered_line = self._filter_poetry_output(line)
                             if filtered_line:
-                                info_logs.append(filtered_line)
+                                important_info.append(filtered_line)
+                            elif filtered_line is None:
+                                # フィルタされたログのカウント
+                                if "DEBUG:" in line:
+                                    filtered_debug_count += 1
+                                else:
+                                    filtered_noise_count += 1
                         else:
-                            # レベル不明のログは情報として扱う
+                            # レベル不明のログも同様に処理
                             filtered_line = self._filter_poetry_output(line)
                             if filtered_line:
-                                info_logs.append(filtered_line)
+                                important_info.append(filtered_line)
+                            elif filtered_line is None:
+                                filtered_noise_count += 1
                 
                 # 実際のエラーのみエラーとして表示
                 if actual_errors:
@@ -2314,9 +2401,40 @@ print(f"RESULT: {{result}}")
                         self.log_message(f"ERROR: {error_line}", "ERROR")
                     self.log_message("=== End Errors ===", "ERROR")
                 
-                # 情報ログは通常のログとして表示
-                for info_line in info_logs:
-                    self.log_message(f"Enhanced: {info_line}")
+                # 重要な情報ログのみ表示（要約付き）
+                if important_info:
+                    # 最重要ログのみを選別
+                    critical_logs = []
+                    progress_logs = []
+                    
+                    for log in important_info:
+                        # 最重要：エラー、完了、パフォーマンス
+                        if any(keyword in log for keyword in ["completed successfully", "RESULT:", "Performance stats"]):
+                            critical_logs.append(log)
+                        # 進行状況：セグメント処理
+                        elif any(keyword in log for keyword in ["processed:", "Pipeline completed", "segments"]):
+                            progress_logs.append(log)
+                    
+                    # 最重要ログは常に表示
+                    for critical_log in critical_logs:
+                        self.log_message(f"Enhanced: {critical_log}")
+                    
+                    # 進行状況は要約して表示
+                    if progress_logs:
+                        if len(progress_logs) <= 3:
+                            for progress_log in progress_logs:
+                                self.log_message(f"Enhanced: {progress_log}")
+                        else:
+                            # 最初と最後のログのみ表示
+                            self.log_message(f"Enhanced: {progress_logs[0]}")
+                            if len(progress_logs) > 2:
+                                self.log_message(f"Enhanced: ... processed {len(progress_logs) - 2} intermediate segments ...")
+                            self.log_message(f"Enhanced: {progress_logs[-1]}")
+                
+                # フィルタリング要約を表示（デバッグレベルで）
+                total_filtered = filtered_debug_count + filtered_noise_count
+                if total_filtered > 10:  # 10個以上フィルタした場合のみ表示
+                    self.log_message(f"📊 Filtered {total_filtered} verbose logs (debug: {filtered_debug_count}, noise: {filtered_noise_count})", "DEBUG")
             
             # クリーンアップ
             if os.path.exists(params_file):
