@@ -1,3 +1,5 @@
 {
-  "model_directory": "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/model_dir"
+  "model_directory": "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/model_dir",
+  "log_filtering_enabled": true,
+  "log_filter_level": "LOW"
 }
