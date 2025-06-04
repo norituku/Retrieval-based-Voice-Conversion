@@ -1277,8 +1277,31 @@ class DarkModeGUI:
             return line
             
         try:
-            # 特にPoetryとライブラリの冗長なログをフィルタ
-            noise_patterns = [
+            # Enhanced変換の進行状況ログを判定
+            enhanced_progress_patterns = [
+                r"Enhanced Pipeline starting",
+                r"Segment \d+/\d+",
+                r"Processing.*segment",
+                r"Audio concatenation",
+                r"Enhanced Pipeline completed",
+                r"Conversion completed successfully",
+                r"✅.*processed:",
+                r"Performance stats:",
+                r"Enhanced features:"
+            ]
+            
+            # Enhanced変換の重要な進行状況は常に表示
+            import re
+            for pattern in enhanced_progress_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    return line  # 重要な進行状況は表示
+            
+            # 詳細なデバッグログはフィルタ
+            debug_noise_patterns = [
+                r"DEBUG:.*Before size adjustment",
+                r"DEBUG:.*Pitch shapes:",
+                r"DEBUG:.*Adjusted pitch to",
+                r"DEBUG:.*Adaptive search:",
                 r"current directory is",
                 r"Loading faiss\.",
                 r"Successfully loaded faiss\.",
@@ -1293,21 +1316,26 @@ class DarkModeGUI:
                 r"overwrite configs\.json",
                 r"Use mps instead",
                 r"HubertModel Config:",
-                r"HubertPretrainingTask Config"
+                r"HubertPretrainingTask Config",
+                r"Stats.*min=.*max=.*mean=",
+                r"\[DEBUG.*\].*Attempting to load",
+                r"Final.*SR.*for output:",
+                r"Selected Synthesizer:",
+                r"Model weights loaded from checkpoint"
             ]
             
-            # ノイズパターンに一致する場合は非表示
-            import re
-            for pattern in noise_patterns:
+            # デバッグノイズパターンに一致する場合は非表示
+            for pattern in debug_noise_patterns:
                 if re.search(pattern, line, re.IGNORECASE):
                     return None  # フィルタして非表示
             
             # ログアナライザーを使用してさらに詳細なフィルタリング（LOWレベル固定）
-            importance = self.log_analyzer.classify_log_line(line)
-            
-            # LOW以上の重要度のメッセージのみ表示（NOISEのみフィルタ）
-            if importance == LogImportance.NOISE:
-                return None
+            if hasattr(self, 'log_analyzer') and self.log_analyzer:
+                importance = self.log_analyzer.classify_log_line(line)
+                
+                # LOW以上の重要度のメッセージのみ表示（NOISEのみフィルタ）
+                if importance == LogImportance.NOISE:
+                    return None
                 
             return line
             
@@ -2252,14 +2280,43 @@ print(f"RESULT: {{result}}")
                         if filtered_line:  # フィルタされなかった場合のみ表示
                             self.log_message(f"Enhanced: {filtered_line}")
             
-            # エラー出力も必ず記録（フィルタリングなしで重要度HIGH）
+            # STDERR出力を適切に分類して処理
             if result.stderr:
-                self.log_message("=== Enhanced Conversion STDERR ===", "ERROR")
-                for line in result.stderr.split('\n'):
+                stderr_lines = result.stderr.split('\n')
+                actual_errors = []
+                info_logs = []
+                
+                for line in stderr_lines:
                     if line.strip():
-                        # stderrは重要なので常に表示（フィルタリングなし）
-                        self.log_message(f"STDERR: {line}", "ERROR")
-                self.log_message("=== End STDERR ===", "ERROR")
+                        # ログレベルに基づいて分類
+                        if any(level in line for level in ["ERROR:", "CRITICAL:", "FATAL:"]):
+                            actual_errors.append(line)
+                        elif any(level in line for level in ["WARNING:", "WARN:"]):
+                            # 警告は適切なレベルで表示
+                            filtered_line = self._filter_poetry_output(line)
+                            if filtered_line:
+                                self.log_message(f"Enhanced: {filtered_line}", "WARNING")
+                        elif any(level in line for level in ["INFO:", "DEBUG:"]):
+                            # 情報ログは通常ログとして処理
+                            filtered_line = self._filter_poetry_output(line)
+                            if filtered_line:
+                                info_logs.append(filtered_line)
+                        else:
+                            # レベル不明のログは情報として扱う
+                            filtered_line = self._filter_poetry_output(line)
+                            if filtered_line:
+                                info_logs.append(filtered_line)
+                
+                # 実際のエラーのみエラーとして表示
+                if actual_errors:
+                    self.log_message("=== Enhanced Conversion Errors ===", "ERROR")
+                    for error_line in actual_errors:
+                        self.log_message(f"ERROR: {error_line}", "ERROR")
+                    self.log_message("=== End Errors ===", "ERROR")
+                
+                # 情報ログは通常のログとして表示
+                for info_line in info_logs:
+                    self.log_message(f"Enhanced: {info_line}")
             
             # クリーンアップ
             if os.path.exists(params_file):
