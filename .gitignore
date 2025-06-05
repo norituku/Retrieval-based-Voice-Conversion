@@ -190,3 +190,25 @@ test_output.*
 *.dmg
 *.app/
 Voice Converter Simple.app/
+
+# Nuitka build outputs
+dist_*/
+*.dist/
+*.build/
+.nuitka_cache/
+*.onefile-build/
+
+# App bundles and packages  
+*.app
+*.dmg
+*.pkg
+
+# macOS specific build artifacts
+*.dSYM/
+xcuserdata/
+
+# Temporary test files
+*_test_*.py
+test_*_*.py
+*_temp.py
+*_tmp.py
