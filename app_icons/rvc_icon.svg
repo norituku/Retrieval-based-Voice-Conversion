@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- グラデーション定義 -->
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d2d2d;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="micGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#007acc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4CAF50;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#007acc;stop-opacity:0.8" />
+      <stop offset="50%" style="stop-color:#4CAF50;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#007acc;stop-opacity:0.8" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景（角丸四角形） -->
+  <rect x="64" y="64" width="896" height="896" rx="160" ry="160" fill="url(#backgroundGradient)" stroke="#007acc" stroke-width="8"/>
+  
+  <!-- マイクロフォン本体 -->
+  <ellipse cx="512" cy="350" rx="80" ry="120" fill="url(#micGradient)" stroke="#ffffff" stroke-width="6"/>
+  
+  <!-- マイクロフォンスタンド -->
+  <rect x="490" y="470" width="44" height="200" fill="url(#micGradient)" stroke="#ffffff" stroke-width="4"/>
+  
+  <!-- マイクロフォンベース -->
+  <ellipse cx="512" cy="720" rx="120" ry="30" fill="url(#micGradient)" stroke="#ffffff" stroke-width="4"/>
+  
+  <!-- 音波エフェクト（左側） -->
+  <path d="M 350 300 Q 280 350 350 400" stroke="url(#waveGradient)" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M 320 280 Q 220 350 320 420" stroke="url(#waveGradient)" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 290 260 Q 160 350 290 440" stroke="url(#waveGradient)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- 音波エフェクト（右側） -->
+  <path d="M 674 300 Q 744 350 674 400" stroke="url(#waveGradient)" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M 704 280 Q 804 350 704 420" stroke="url(#waveGradient)" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 734 260 Q 864 350 734 440" stroke="url(#waveGradient)" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- 変換矢印 -->
+  <path d="M 512 520 L 512 580 M 492 560 L 512 580 L 532 560" stroke="#ffffff" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- RVCテキスト -->
+  <text x="512" y="850" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="#ffffff">RVC</text>
+  
+  <!-- 小さな音符装飾 -->
+  <circle cx="200" cy="200" r="8" fill="#4CAF50"/>
+  <circle cx="824" cy="200" r="8" fill="#4CAF50"/>
+  <circle cx="200" cy="824" r="8" fill="#007acc"/>
+  <circle cx="824" cy="824" r="8" fill="#007acc"/>
+</svg>

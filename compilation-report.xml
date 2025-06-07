@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='utf8'?>
+<nuitka-compilation-report nuitka_version="2.7.6" nuitka_commercial_version="not installed" mode="app" completion="error exit (1)">
+  <performance>
+    <memory_usage name="after_launch" value="69500928" />
+  </performance>
+  <data_file name="model_dir/0/params.json" source="model_dir/0/params.json" size="323" reason="specified data dir 'model_dir/0' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/0/tsukuyomi_v2_40k_e100_simple.onnx" source="model_dir/0/tsukuyomi_v2_40k_e100_simple.onnx" size="55382411" reason="specified data dir 'model_dir/0' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/1/amitaro_v2_40k_e100_simple.onnx" source="model_dir/1/amitaro_v2_40k_e100_simple.onnx" size="55382411" reason="specified data dir 'model_dir/1' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/1/params.json" source="model_dir/1/params.json" size="317" reason="specified data dir 'model_dir/1' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/2/kikoto_mahiro_v2_40k_simple.onnx" source="model_dir/2/kikoto_mahiro_v2_40k_simple.onnx" size="55382411" reason="specified data dir 'model_dir/2' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/2/params.json" source="model_dir/2/params.json" size="335" reason="specified data dir 'model_dir/2' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/3/params.json" source="model_dir/3/params.json" size="338" reason="specified data dir 'model_dir/3' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/3/tokina_shigure_v2_40k_e100_simple.onnx" source="model_dir/3/tokina_shigure_v2_40k_e100_simple.onnx" size="55382411" reason="specified data dir 'model_dir/3' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/4/params.json" source="model_dir/4/params.json" size="286" reason="specified data dir 'model_dir/4' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/4/tire.index" source="model_dir/4/tire.index" size="1254712365" reason="specified data dir 'model_dir/4' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/4/tire.pth" source="model_dir/4/tire.pth" size="55224837" reason="specified data dir 'model_dir/4' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/4/tire_features.npy" source="model_dir/4/tire_features.npy" size="1254712448" reason="specified data dir 'model_dir/4' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/5/KAZUMA_aio.index" source="model_dir/5/KAZUMA_aio.index" size="298227299" reason="specified data dir 'model_dir/5' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/5/KAZUMA_aio.pth" source="model_dir/5/KAZUMA_aio.pth" size="55223738" reason="specified data dir 'model_dir/5' on command line" tags="user,copy,data-dir-contents" />
+  <data_file name="model_dir/5/params.json" source="model_dir/5/params.json" size="282" reason="specified data dir 'model_dir/5' on command line" tags="user,copy,data-dir-contents" />
+  <data_composer blob_size="None" />
+  <command_line>
+    <option value="--standalone" />
+    <option value="--macos-create-app-bundle" />
+    <option value="--macos-app-name=RVC Voice Converter" />
+    <option value="--macos-app-version=0.3.5" />
+    <option value="--macos-signed-app-name=com.rvc.voiceconverter" />
+    <option value="--enable-plugin=tk-inter" />
+    <option value="--enable-plugin=numpy" />
+    <option value="--enable-plugin=anti-bloat" />
+    <option value="--enable-plugin=torch" />
+    <option value="--nofollow-import-to=matplotlib" />
+    <option value="--nofollow-import-to=IPython" />
+    <option value="--nofollow-import-to=jupyter" />
+    <option value="--nofollow-import-to=notebook" />
+    <option value="--nofollow-import-to=pytest" />
+    <option value="--nofollow-import-to=sphinx" />
+    <option value="--nofollow-import-to=setuptools" />
+    <option value="--nofollow-import-to=pip" />
+    <option value="--nofollow-import-to=wheel" />
+    <option value="--nofollow-import-to=fairseq.distributed" />
+    <option value="--nofollow-import-to=fairseq.benchmark" />
+    <option value="--nofollow-import-to=fairseq.model_parallel" />
+    <option value="--include-package=rvc" />
+    <option value="--include-package=numpy" />
+    <option value="--include-package=scipy.signal" />
+    <option value="--include-package=soundfile" />
+    <option value="--include-data-dir=model_dir/0=model_dir/0" />
+    <option value="--include-data-dir=model_dir/1=model_dir/1" />
+    <option value="--include-data-dir=model_dir/2=model_dir/2" />
+    <option value="--include-data-dir=model_dir/3=model_dir/3" />
+    <option value="--include-data-dir=model_dir/4=model_dir/4" />
+    <option value="--include-data-dir=model_dir/5=model_dir/5" />
+    <option value="--assume-yes-for-downloads" />
+    <option value="--report=compilation-report.xml" />
+    <option value="--output-dir=dist_standard" />
+    <option value="--remove-output" />
+    <option value="--show-progress" />
+    <option value="--show-memory" />
+    <option value="--verbose" />
+    <option value="/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/gui_dark_mode_enhanced.py" />
+  </command_line>
+  <plugins>
+    <plugin name="anti-bloat" user_enabled="no" />
+    <plugin name="data-files" user_enabled="no" />
+    <plugin name="delvewheel" user_enabled="no" />
+    <plugin name="dll-files" user_enabled="no" />
+    <plugin name="eventlet" user_enabled="no" />
+    <plugin name="gevent" user_enabled="no" />
+    <plugin name="gi" user_enabled="no" />
+    <plugin name="glfw" user_enabled="no" />
+    <plugin name="implicit-imports" user_enabled="no" />
+    <plugin name="kivy" user_enabled="no" />
+    <plugin name="matplotlib" user_enabled="no" />
+    <plugin name="multiprocessing" user_enabled="no" />
+    <plugin name="options-nanny" user_enabled="no" />
+    <plugin name="pbr-compat" user_enabled="no" />
+    <plugin name="pkg-resources" user_enabled="no" />
+    <plugin name="playwright" user_enabled="no" />
+    <plugin name="pywebview" user_enabled="no" />
+    <plugin name="spacy" user_enabled="no" />
+    <plugin name="tk-inter" user_enabled="yes" />
+    <plugin name="transformers" user_enabled="no" />
+  </plugins>
+  <distributions />
+  <python python_exe="${sys.prefix}/bin/python" python_flavor="Homebrew Python" python_version="3.13.3" os_name="Darwin" os_release="15.5" arch_name="arm64" filesystem_encoding="utf-8">
+    <search_path>
+      <path value="${cwd}" />
+      <path value="${sys.prefix}/bin" />
+      <path value="${sys.real_prefix}/lib/python3.13" />
+      <path value="${sys.real_prefix}/lib/python3.13/lib-dynload" />
+      <path value="${sys.prefix}/lib/python3.13/site-packages" />
+      <path value="~/.local/pipx/shared/lib/python3.13/site-packages" />
+      <path value="/opt/homebrew/opt/python-tk@3.13/libexec" />
+    </search_path>
+  </python>
+  <output run_filename="${cwd}/dist_standard/gui_dark_mode_enhanced.app/Contents/MacOS/gui_dark_mode_enhanced" />
+</nuitka-compilation-report>

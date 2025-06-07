@@ -55,7 +55,7 @@ class SimpleCompleteBuilder:
             if result.returncode != 0:
                 print("📦 Nuitkaインストール中...")
                 install_result = subprocess.run([
-                    self.system_python, "-m", "pip", "install", "nuitka"
+                    self.system_python, "-m", "pip", "install", "nuitka", "--break-system-packages"
                 ], capture_output=True, text=True)
                 
                 if install_result.returncode != 0:
@@ -73,21 +73,21 @@ class SimpleCompleteBuilder:
             return False
     
     def build_gui_with_nuitka(self):
-        """既存のGUIをNuitkaでビルド"""
-        print("🔧 既存GUI（gui_dark_mode_enhanced.py）をNuitkaビルド中...")
+        """最新GUI（complete_voice_converter.py）をNuitkaでビルド"""
+        print("🔧 最新GUI（complete_voice_converter.py - 改良デバッグ版）をNuitkaビルド中...")
         
-        gui_file = self.project_root / "gui_dark_mode_enhanced.py"
+        gui_file = self.project_root / "complete_voice_converter.py"
         if not gui_file.exists():
             print(f"❌ GUIファイルが見つかりません: {gui_file}")
             return None
         
         # 出力ディレクトリ準備
-        output_dir = self.project_root / "dist_complete_gui"
+        output_dir = self.project_root / "dist_complete_debug"
         if output_dir.exists():
             shutil.rmtree(output_dir)
         output_dir.mkdir()
         
-        # Nuitkaコマンド構築
+        # Nuitkaコマンド構築（デバッグ強化版）
         nuitka_cmd = [
             self.system_python, "-m", "nuitka",
             "--standalone",
@@ -99,8 +99,8 @@ class SimpleCompleteBuilder:
             "--include-data-dir=rvc=rvc",
             "--include-data-files=pyproject.toml=pyproject.toml",
             "--include-data-files=poetry.lock=poetry.lock",
-            "--macos-app-name=RVC Voice Converter Complete",
-            "--macos-app-version=1.0.0",
+            "--macos-app-name=RVC Voice Converter Debug Edition",
+            "--macos-app-version=1.0.2",
             "--macos-app-protected-resource=microphone:RVC音声変換のためマイクアクセス",
             "--remove-output",
             str(gui_file)
@@ -117,9 +117,17 @@ class SimpleCompleteBuilder:
             print(f"✅ Nuitkaビルド成功! (実行時間: {end_time - start_time:.1f}秒)")
             
             # 生成されたアプリの確認
-            app_path = output_dir / "RVC Voice Converter Complete.app"
+            app_path = output_dir / "complete_voice_converter.app"
             if app_path.exists():
-                print(f"📱 完全版アプリ生成: {app_path}")
+                print(f"📱 モデルカード版アプリ生成: {app_path}")
+                
+                # アプリ名をわかりやすく変更
+                new_app_path = output_dir / "RVC Voice Converter Debug Edition.app"
+                if new_app_path.exists():
+                    shutil.rmtree(new_app_path)
+                shutil.move(str(app_path), str(new_app_path))
+                app_path = new_app_path
+                print(f"📱 アプリ名変更完了: {app_path}")
                 
                 # アプリサイズ確認
                 try:
@@ -157,8 +165,8 @@ class SimpleCompleteBuilder:
             # 必須ファイル確認
             required_files = [
                 "Contents/Info.plist",
-                "Contents/MacOS/gui_dark_mode_enhanced",
-                "Contents/Resources"
+                "Contents/MacOS/complete_voice_converter",
+                "Contents/MacOS"
             ]
             
             missing_files = []
@@ -184,9 +192,9 @@ class SimpleCompleteBuilder:
             print("❌ アプリパスが無効なため、DMG作成をスキップ")
             return None
         
-        print("💿 完全版DMG作成中...")
+        print("💿 モデルカード版DMG作成中...")
         
-        dmg_name = "RVC_Voice_Converter_Complete.dmg"
+        dmg_name = "RVC_Voice_Converter_ModelCard_Edition.dmg"
         dmg_path = self.project_root / dmg_name
         
         # 既存DMGを削除
@@ -208,14 +216,21 @@ class SimpleCompleteBuilder:
                 applications_link.symlink_to("/Applications")
                 
                 # README作成
-                readme_content = """RVC Voice Converter Complete Edition
+                readme_content = """RVC Voice Converter Model Card Edition
 
 インストール手順:
-1. RVC Voice Converter Complete.app を Applications フォルダにドラッグ&ドロップ
+1. RVC Voice Converter Model Card Edition.app を Applications フォルダにドラッグ&ドロップ
 2. アプリケーションフォルダから起動
 3. 初回起動時はセキュリティ設定で許可が必要な場合があります
 
-特徴:
+🆕 Model Card Edition の特徴:
+- 🎵 モデルカード形式UI（視覚的で使いやすい）
+- 🎯 高品質固定設定（rmvpe + 最適パラメータ）
+- ✅ インデックス有無の一目確認
+- 🔄 スクロール対応（多数モデル表示可能）
+- 🖱️ クリック選択・ホバーエフェクト
+
+技術仕様:
 - Enhanced Voice Converter統合
 - PyTorch、librosa、fairseq完全対応
 - ダークモードGUI
@@ -225,7 +240,7 @@ class SimpleCompleteBuilder:
 - Poetry環境が必要です（音声変換処理用）
 - モデルファイルは model_dir フォルダに配置済み
 
-© 2024 RVC Voice Converter Complete Edition
+© 2024 RVC Voice Converter Model Card Edition v1.0.1
 """
                 readme_path = temp_path / "README.txt"
                 with open(readme_path, 'w', encoding='utf-8') as f:
@@ -235,7 +250,7 @@ class SimpleCompleteBuilder:
                 create_cmd = [
                     "hdiutil", "create",
                     "-srcfolder", str(temp_path),
-                    "-volname", "RVC Voice Converter Complete",
+                    "-volname", "RVC Voice Converter Model Card Edition",
                     "-fs", "HFS+",
                     "-format", "UDZO",
                     "-imagekey", "zlib-level=9",
@@ -245,7 +260,7 @@ class SimpleCompleteBuilder:
                 result = subprocess.run(create_cmd, capture_output=True, text=True)
                 
                 if result.returncode == 0:
-                    print(f"✅ 完全版DMG作成完了: {dmg_path}")
+                    print(f"✅ モデルカード版DMG作成完了: {dmg_path}")
                     
                     # DMGサイズ確認
                     if dmg_path.exists():
@@ -339,14 +354,18 @@ class SimpleCompleteBuilder:
         print(f"\\n総合結果: {success_count}/{total_count} 成功")
         
         if success_count >= total_count - 1:  # 1つまでの失敗は許容
-            print(f"🎉 RVC Voice Converter Complete Edition ビルド完了！")
-            print(f"📱 完全版アプリ: dist_complete_gui/")
-            print(f"💿 配布用DMG: RVC_Voice_Converter_Complete.dmg")
+            print(f"🎉 RVC Voice Converter Model Card Edition ビルド完了！")
+            print(f"📱 モデルカード版アプリ: dist_complete_gui/")
+            print(f"💿 配布用DMG: RVC_Voice_Converter_ModelCard_Edition.dmg")
             print(f"\\n🎯 使用方法:")
             print(f"  1. DMGファイルをダブルクリック")
             print(f"  2. アプリをApplicationsフォルダにドラッグ")
             print(f"  3. Poetry環境がセットアップされていることを確認")
             print(f"  4. アプリケーションフォルダから起動")
+            print(f"\\n🆕 Model Card Edition の新機能:")
+            print(f"  • モデルカード形式UI（視覚的選択）")
+            print(f"  • 高品質固定設定（最適パラメータ）")
+            print(f"  • インデックス有無の即座確認")
         else:
             print(f"⚠️ 一部ステップが失敗しました")
         

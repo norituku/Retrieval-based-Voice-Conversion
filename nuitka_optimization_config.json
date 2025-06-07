@@ -1,0 +1,28 @@
+{
+  "plugins": [
+    "tk-inter",
+    "numpy",
+    "anti-bloat",
+    "torch"
+  ],
+  "include_packages": [
+    "rvc",
+    "numpy",
+    "scipy.signal",
+    "soundfile"
+  ],
+  "nofollow_imports": [
+    "matplotlib",
+    "IPython",
+    "jupyter",
+    "notebook",
+    "pytest",
+    "sphinx",
+    "setuptools",
+    "pip",
+    "wheel",
+    "fairseq.distributed",
+    "fairseq.benchmark",
+    "fairseq.model_parallel"
+  ]
+}

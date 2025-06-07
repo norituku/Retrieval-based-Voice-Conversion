@@ -1,0 +1,13 @@
+{
+  "include_commands": [
+    "--include-data-dir=model_dir/0=model_dir/0",
+    "--include-data-dir=model_dir/1=model_dir/1",
+    "--include-data-dir=model_dir/2=model_dir/2",
+    "--include-data-dir=model_dir/3=model_dir/3",
+    "--include-data-dir=model_dir/4=model_dir/4",
+    "--include-data-dir=model_dir/5=model_dir/5"
+  ],
+  "external_resources_dir": "/Users/norikene_satoshi/Library/Application Support/RVC Voice Converter",
+  "bundle_size_mb": 0.0017938613891601562,
+  "external_size_gb": 3.269242599606514
+}

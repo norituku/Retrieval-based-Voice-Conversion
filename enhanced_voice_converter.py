@@ -147,15 +147,15 @@ class EnhancedVoiceConverter:
         self.config = Config()
         self.vc = EnhancedVC(self.config)
         
-        # デフォルトパラメータ（環境設定より先に定義）
+        # デフォルトパラメータ（高品質設定）
         self.default_params = {
             'pitch': 0,
-            'f0_method': 'rmvpe',
-            'index_rate': 1.0,
-            'filter_radius': 3,
-            'rms_mix_rate': 0.25,
-            'protect': 0.33,
-            'resample_sr': 0,
+            'f0_method': 'rmvpe',  # 高品質F0推定
+            'index_rate': 0.7,     # 高品質インデックス比率
+            'filter_radius': 3,    # 高品質フィルタ
+            'rms_mix_rate': 0.25,  # 最適なRMSミックス
+            'protect': 0.33,       # 音質保護レベル
+            'resample_sr': 0,      # 自動選択（入力ファイル準拠）
             'f0_up_key': 0
         }
         
@@ -226,9 +226,9 @@ class EnhancedVoiceConverter:
         # MPSでFFTが動作しない問題への対処
         import torch
         if torch.backends.mps.is_available():
-            logger.warning("MPS detected - using CPU for F0 estimation to avoid FFT issues")
-            # MPS使用時はF0メソッドをCPU互換のものに変更
-            self.default_params['f0_method'] = 'harvest'  # harvestはCPUで安定動作
+            logger.warning("MPS detected - using rmvpe for best quality with MPS support")
+            # MPS使用時もrmvpeを使用（最新版は改善されています）
+            self.default_params['f0_method'] = 'rmvpe'  # rmvpeは高品質でMPS対応
     
     def list_available_models(self):
         """利用可能なモデル一覧を取得"""
@@ -245,6 +245,7 @@ class EnhancedVoiceConverter:
                 
             model_info = {
                 'name': model_path.stem,
+                'clean_name': model_path.stem,  # ファイル名用の純粋なモデル名
                 'path': str(model_path),
                 'size': model_path.stat().st_size,
                 'has_index': False,
