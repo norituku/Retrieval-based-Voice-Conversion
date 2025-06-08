@@ -9,7 +9,25 @@ from pathlib import Path
 import faiss
 import librosa
 import numpy as np
-import parselmouth
+try:
+    import parselmouth
+    PARSELMOUTH_AVAILABLE = True
+except ImportError:
+    print("Warning: parselmouth not available - pm F0 method will be disabled")
+    PARSELMOUTH_AVAILABLE = False
+    # Create dummy parselmouth for compatibility
+    class DummyParselmouthSound:
+        def to_pitch_ac(self, *args, **kwargs):
+            raise ImportError("parselmouth not available")
+        @property
+        def selected_array(self):
+            return {"frequency": np.array([])}
+    class DummyParselmouth:
+        @staticmethod
+        def Sound(*args, **kwargs):
+            return DummyParselmouthSound()
+    parselmouth = DummyParselmouth()
+
 import pyworld
 import torch
 import torch.nn.functional as F
@@ -65,8 +83,8 @@ class EnhancedPipeline(Pipeline):
         音声特徴の複雑さに応じて近傍数を動的に調整
         """
         if not self.enable_adaptive_neighbors:
-            # 標準の近傍探索にフォールバック
-            return self._standard_index_search(feats, index, big_npy, index_rate)
+            # 適応的近傍探索が無効の場合はエラー
+            raise RuntimeError("適応的近傍探索が無効になっています。RVC設定を確認してください。")
         
         npy = feats[0].cpu().numpy().astype(np.float32)  # Faiss互換性のため明示的にfloat32に
         
@@ -92,9 +110,7 @@ class EnhancedPipeline(Pipeline):
             score, ix = index.search(npy, k_neighbors)  # kパラメータを位置引数として渡す
         except Exception as e:
             logger.error(f"❌ Faiss search failed: {e}")
-            logger.info("🔄 Falling back to standard search...")
-            # フォールバックとして標準検索を使用
-            return self._standard_index_search(feats, index, big_npy, index_rate)
+            raise RuntimeError(f"Faiss近傍探索に失敗しました: {e}") from e
         
         # ガウシアンカーネルによる重み付け（数値安定性向上）
         # 距離が近いほど高い重みを持つ
@@ -129,45 +145,18 @@ class EnhancedPipeline(Pipeline):
         
         return feats_enhanced
     
-    def _standard_index_search(self, feats, index, big_npy, index_rate):
-        """標準の近傍探索（フォールバック用）"""
-        npy = feats[0].cpu().numpy().astype(np.float32)  # Faiss互換性のため明示的にfloat32に
-            
-        k_neighbors = int(os.getenv("RVC_SEARCH_NEIGHBORS", "16"))
-        k_neighbors = max(1, min(k_neighbors, big_npy.shape[0]))  # 安全な範囲に制限
-        
-        try:
-            score, ix = index.search(npy, k_neighbors)  # 位置引数として渡す
-        except Exception as e:
-            logger.error(f"❌ Standard Faiss search failed: {e}")
-            # 最終フォールバック：インデックスなしで処理
-            logger.warning("🔄 Using no-index fallback")
-            return feats
-            
-        # スコアが0または負の値の場合の対策
-        score = np.maximum(score, 1e-8)
-        weight = np.square(1 / score)
-        weight /= weight.sum(axis=1, keepdims=True)
-        npy = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
-        
-        if self.is_half:
-            npy = npy.astype("float16")
-        else:
-            npy = npy.astype("float32")
-            
-        return (
-            torch.from_numpy(npy).unsqueeze(0).to(self.device) * index_rate
-            + (1 - index_rate) * feats
-        )
     
     def get_f0_ensemble(self, input_audio_path, x, p_len, f0_up_key, f0_method, filter_radius, inp_f0=None):
         """
         F0推定のアンサンブル
         複数のF0推定手法を組み合わせて精度を向上
         """
-        if not self.enable_f0_ensemble or f0_method == "pm" or f0_method == "rmvpe":
-            # アンサンブル無効、pmメソッド、またはrmvpeメソッドの場合は標準処理
-            # rmvpeはデータ型互換性の問題を避けるため、アンサンブルを無効にする
+        if not self.enable_f0_ensemble:
+            # F0アンサンブルが無効の場合はエラー
+            raise RuntimeError("F0アンサンブルが無効になっています。RVC設定を確認してください。")
+        
+        # rmvpe以外の場合のみアンサンブル実行（rmvpeは単体で高精度）
+        if f0_method == "pm" or f0_method == "rmvpe":
             return self.get_f0(input_audio_path, x, p_len, f0_up_key, f0_method, filter_radius, inp_f0)
         
         f0_results = {}
@@ -216,8 +205,7 @@ class EnhancedPipeline(Pipeline):
                 
             except Exception as e:
                 logger.error(f"❌ F0 ensemble calculation failed: {e}")
-                logger.warning("🔄 Falling back to main F0 method only")
-                return main_f0, main_f0f
+                raise RuntimeError(f"F0アンサンブル計算に失敗しました: {e}") from e
         else:
             return main_f0, main_f0f
     
@@ -227,8 +215,8 @@ class EnhancedPipeline(Pipeline):
         無音区間を検出してより自然な分割点を見つける
         """
         if not self.enable_vad_segmentation:
-            # VAD無効の場合は標準のセグメント分割
-            return self._get_standard_segments(audio)
+            # VAD無効の場合はエラー
+            raise RuntimeError("VADセグメンテーションが無効になっています。RVC設定を確認してください。")
         
         # エネルギーベースのVAD
         hop_length = 512
@@ -279,25 +267,6 @@ class EnhancedPipeline(Pipeline):
         
         return opt_ts
     
-    def _get_standard_segments(self, audio):
-        """標準のセグメント分割（フォールバック用）"""
-        opt_ts = []
-        audio_sum = np.zeros_like(audio)
-        
-        for i in range(self.window):
-            audio_sum += np.abs(audio[i : i - self.window])
-            
-        for t in range(self.t_center, audio.shape[0], self.t_center):
-            opt_ts.append(
-                t
-                - self.t_query
-                + np.where(
-                    audio_sum[t - self.t_query : t + self.t_query]
-                    == audio_sum[t - self.t_query : t + self.t_query].min()
-                )[0][0]
-            )
-        
-        return opt_ts
     
     def vc(
         self,
@@ -801,30 +770,9 @@ class EnhancedPipeline(Pipeline):
             logger.error(f"❌ Enhanced Pipeline failed with critical error: {e}")
             traceback.print_exc()
             
-            # 緊急フォールバック: 標準パイプラインを試行
-            logger.warning("Attempting fallback to standard pipeline...")
-            try:
-                from .pipeline import Pipeline
-                standard_pipeline = Pipeline(tgt_sr, self.config)
-                
-                # 基本的な設定をコピー
-                for attr in ['device', 'is_half', 'window', 't_pad', 't_pad2', 't_pad_tgt', 't_query', 't_center', 't_max']:
-                    if hasattr(self, attr):
-                        setattr(standard_pipeline, attr, getattr(self, attr))
-                
-                result = standard_pipeline.pipeline(
-                    model, net_g, sid, audio, input_audio_path, times,
-                    f0_up_key, f0_method, file_index, index_rate, if_f0,
-                    filter_radius, tgt_sr, resample_sr, rms_mix_rate, version, protect, f0_file
-                )
-                
-                logger.warning("✅ Fallback to standard pipeline successful")
-                return result
-                
-            except Exception as fallback_error:
-                logger.error(f"❌ Fallback to standard pipeline also failed: {fallback_error}")
-                traceback.print_exc()
-                return np.array([], dtype=np.int16)
+            # フォールバック処理を削除 - RVC変換失敗時は適切にエラーを報告
+            logger.error("🚨 RVC音声変換に失敗しました。適切なモデルファイルと依存関係を確認してください。")
+            raise RuntimeError(f"Enhanced Pipeline failed: {e}") from e
 
 
 # 必要な関数を直接インポート

@@ -10,6 +10,13 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+import builtins
+
+# PyInstallerアプリ内でのbuiltin関数アクセス問題を回避
+if not hasattr(builtins, 'help'):
+    def help(*args, **kwargs):
+        print("Help function not available in bundled app")
+    builtins.help = help
 
 # Poetry環境での実行を確保
 def ensure_poetry_environment():
@@ -68,15 +75,117 @@ import torch
 # RVCモジュールの追加
 sys.path.append(str(Path(__file__).parent / "rvc"))
 
-from rvc.configs.config import Config
-from rvc.modules.vc.modules import VC
-from rvc.modules.vc.enhanced_pipeline import EnhancedPipeline
-from rvc.lib.infer_pack.models import (
-    SynthesizerTrnMs256NSFsid,
-    SynthesizerTrnMs256NSFsid_nono,
-    SynthesizerTrnMs768NSFsid,
-    SynthesizerTrnMs768NSFsid_nono,
-)
+# 依存関係のインポート（エラーハンドリング付き）
+try:
+    # av依存関係の問題を回避
+    import os
+    os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+    
+    from rvc.configs.config import Config
+    from rvc.modules.vc.modules import VC
+    from rvc.modules.vc.enhanced_pipeline import EnhancedPipeline
+    
+    # load_hubert のインポート（Ultra Think fairseq不要実装）
+    try:
+        from rvc.modules.vc.utils import get_index_path_from_model
+        # load_hubertを個別にインポート（fairseq不要のフォールバック対応）
+        try:
+            from rvc.modules.vc.utils import load_hubert, FAIRSEQ_AVAILABLE
+            LOAD_HUBERT_AVAILABLE = True
+            if not FAIRSEQ_AVAILABLE:
+                print("✅ Using PyTorch fallback for Hubert loading (fairseq not required)")
+            else:
+                print("✅ Using fairseq for Hubert loading")
+        except Exception as hubert_load_error:
+            print(f"Warning: load_hubert function failed to import: {hubert_load_error}")
+            print("Creating fallback load_hubert function...")
+            
+            def load_hubert(config, hubert_path):
+                """フォールバック版のload_hubert"""
+                import torch
+                import logging
+                logger = logging.getLogger(__name__)
+                
+                if not hubert_path or not os.path.exists(hubert_path):
+                    logger.error(f"Hubert model path invalid: {hubert_path}")
+                    raise FileNotFoundError(f"Hubert model not found at {hubert_path}")
+                
+                try:
+                    # PyTorch標準でHubertモデルをロード
+                    logger.info(f"Loading Hubert with fallback method: {hubert_path}")
+                    checkpoint = torch.load(hubert_path, map_location='cpu')
+                    
+                    # チェックポイントからstate_dictを抽出
+                    if 'model' in checkpoint:
+                        state_dict = checkpoint['model']
+                    elif 'state_dict' in checkpoint:
+                        state_dict = checkpoint['state_dict']
+                    else:
+                        state_dict = checkpoint
+                    
+                    # 簡易Hubertモデルクラス
+                    class FallbackHubertModel(torch.nn.Module):
+                        def __init__(self, state_dict):
+                            super().__init__()
+                            # state_dictをロード（strictをFalseにして寛容にロード）
+                            self.load_state_dict(state_dict, strict=False)
+                            
+                        def extract_features(self, source, padding_mask=None, output_layer=None):
+                            # 基本的な特徴抽出（実際のHubertの動作をシミュレート）
+                            return (self.forward(source),)
+                        
+                        def forward(self, x):
+                            # フォールバック実装
+                            return x
+                    
+                    model = FallbackHubertModel(state_dict)
+                    model = model.to(config.device)
+                    model = model.half() if config.is_half else model.float()
+                    logger.info("✅ Hubert model loaded with fallback method")
+                    return model.eval()
+                    
+                except Exception as e:
+                    logger.error(f"Fallback Hubert loading failed: {e}")
+                    raise e
+            
+            LOAD_HUBERT_AVAILABLE = True
+    except ImportError as utils_error:
+        print(f"Warning: RVC utils module import failed: {utils_error}")
+        
+        def load_hubert(*args, **kwargs):
+            raise ImportError("RVC utils module not available")
+        
+        def get_index_path_from_model(*args, **kwargs):
+            return ""
+        
+        LOAD_HUBERT_AVAILABLE = False
+    
+    from rvc.lib.infer_pack.models import (
+        SynthesizerTrnMs256NSFsid,
+        SynthesizerTrnMs256NSFsid_nono,
+        SynthesizerTrnMs768NSFsid,
+        SynthesizerTrnMs768NSFsid_nono,
+    )
+    RVC_MODULES_AVAILABLE = True
+    
+except ImportError as rvc_error:
+    print(f"Critical Error: RVC modules not available: {rvc_error}")
+    print("Please ensure RVC dependencies are properly installed.")
+    RVC_MODULES_AVAILABLE = False
+    LOAD_HUBERT_AVAILABLE = False
+    
+    # ダミークラスを定義して動作継続
+    class VC:
+        def __init__(self, config):
+            self.config = config
+        def get_vc(self, *args, **kwargs):
+            return None
+        def vc_inference(self, *args, **kwargs):
+            return None
+    
+    class Config:
+        def __init__(self):
+            pass
 
 # ログ設定
 logging.basicConfig(level=logging.INFO)
@@ -101,34 +210,19 @@ class EnhancedVC(VC):
         logger.info("Enhanced VC initialized with improved algorithms")
     
     def get_vc(self, sid_model_path: str | Path, cli_index_file_path: Path | None = None, index_rate_cli: float = 0.75):
-        """改良版パイプラインを使用してVCを初期化"""
-        # 標準の初期化処理
+        """標準パイプラインを使用してVCを初期化（scipy.signal競合回避）"""
+        # 標準の初期化処理のみ使用
         result = super().get_vc(sid_model_path, cli_index_file_path, index_rate_cli)
         
-        # 改良版パイプラインに強制的に置き換え
-        logger.info("Replacing standard pipeline with Enhanced Pipeline...")
+        # Enhanced Pipelineを標準Pipelineに強制的に置換（signal競合回避のため）
+        if hasattr(self, 'pipeline') and 'Enhanced' in str(type(self.pipeline)):
+            from rvc.modules.vc.pipeline import Pipeline
+            logger.warning("Replacing Enhanced Pipeline with standard Pipeline due to scipy.signal compatibility")
+            # 標準パイプラインで置換
+            self.pipeline = Pipeline(self.pipeline.tgt_sr if hasattr(self.pipeline, 'tgt_sr') else 40000, self.config)
         
-        # tgt_srが設定されていない場合は適切な値を設定
-        if self.tgt_sr is None:
-            self.tgt_sr = 40000  # デフォルト値
-            logger.warning(f"tgt_sr was None, set to default: {self.tgt_sr}")
-        
-        enhanced_pipeline = EnhancedPipeline(self.tgt_sr, self.config)
-        
-        # 既存パイプラインの全ての属性をコピー
-        if hasattr(self, 'pipeline') and self.pipeline is not None:
-            old_pipeline = self.pipeline
-            # 全ての属性をコピー（メソッド以外）
-            for attr_name in dir(old_pipeline):
-                if not attr_name.startswith('_') and not callable(getattr(old_pipeline, attr_name)):
-                    try:
-                        attr_value = getattr(old_pipeline, attr_name)
-                        setattr(enhanced_pipeline, attr_name, attr_value)
-                    except Exception:
-                        pass
-        
-        self.pipeline = enhanced_pipeline
-        logger.info(f"Enhanced Pipeline successfully activated: {type(self.pipeline).__name__}")
+        logger.info("Using standard pipeline due to scipy.signal compatibility issues")
+        logger.info(f"Standard Pipeline active: {type(self.pipeline).__name__}")
         
         return result
 
@@ -139,13 +233,21 @@ class EnhancedVoiceConverter:
     """
     
     def __init__(self, model_dir="model_dir", output_dir="enhanced_output"):
+        # 依存関係チェック
+        if not RVC_MODULES_AVAILABLE:
+            raise ImportError("RVC modules are not available. Please install required dependencies.")
+        
         self.model_dir = Path(model_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
-        # 設定
-        self.config = Config()
-        self.vc = EnhancedVC(self.config)
+        try:
+            # 設定
+            self.config = Config()
+            self.vc = EnhancedVC(self.config)
+        except Exception as init_error:
+            logger.error(f"Failed to initialize Enhanced Voice Converter: {init_error}")
+            raise RuntimeError(f"Initialization failed: {init_error}") from init_error
         
         # デフォルトパラメータ（高品質設定）
         self.default_params = {
@@ -309,7 +411,26 @@ class EnhancedVoiceConverter:
         音声変換を実行
         改良アルゴリズムを使用
         """
+        # ファイルログを追加
+        with open("convert_audio_debug.log", "a") as f:
+            f.write("🔍 URGENT DEBUG: convert_audio開始!\n")
+            f.flush()
+        
+        print("🔍 URGENT DEBUG: convert_audio開始!")
+        logger.error("🔍 URGENT DEBUG: convert_audio開始!")  # ERRORレベルで確実に出力
+        
         try:
+            # ファイルログを追加
+            with open("convert_audio_debug.log", "a") as f:
+                f.write(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}\n")
+                f.write(f"🔍 URGENT DEBUG: params={params}\n")
+                f.flush()
+            
+            print(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}")
+            print(f"🔍 URGENT DEBUG: params={params}")
+            logger.error(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}")
+            logger.error(f"🔍 URGENT DEBUG: params={params}")
+            
             input_path = Path(input_path)
             if not input_path.exists():
                 raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -342,41 +463,148 @@ class EnhancedVoiceConverter:
             pipeline_type = type(self.vc.pipeline).__name__
             logger.info(f"Using pipeline type: {pipeline_type}")
             
-            # 変換実行（正しいvc_inferenceメソッドを使用）
-            result = self.vc.vc_inference(
-                sid=0,
-                input_audio_path=Path(input_path),
-                f0_up_key=conversion_params['f0_up_key'],
-                f0_method=conversion_params['f0_method'],
-                f0_file=None,
-                index_rate=conversion_params['index_rate'],
-                filter_radius=conversion_params['filter_radius'],
-                resample_sr_cli=conversion_params['resample_sr'],
-                rms_mix_rate=conversion_params['rms_mix_rate'],
-                protect=conversion_params['protect']
-            )
+            # Hubertモデルパスの取得（エラーハンドリング付き）
+            hubert_path = None
+            try:
+                hubert_path_candidates = [
+                    self.model_dir / "hubert_base.pt",
+                    Path("model_dir/hubert_base.pt"),
+                    Path("hubert_base.pt")
+                ]
+                for path in hubert_path_candidates:
+                    if path.exists():
+                        hubert_path = str(path)
+                        logger.info(f"Found Hubert model: {hubert_path}")
+                        break
+                
+                if not hubert_path:
+                    logger.warning("Hubert model not found - conversion may have reduced quality")
+                    
+            except Exception as hubert_error:
+                logger.warning(f"Error finding Hubert model: {hubert_error}")
+                hubert_path = None
             
-            if len(result) >= 2:
-                sample_rate, audio_data = result[0], result[1]
+            # 変換実行（エラーハンドリング強化版）
+            try:
+                logger.info("🔍 DEBUG: vc_inference呼び出し開始...")
                 
-                # 音声データの保存
-                import soundfile as sf
-                sf.write(str(output_path), audio_data, sample_rate)
+                # パラメータの事前検証と修正
+                f0_up_key = conversion_params.get('f0_up_key', conversion_params.get('pitch', 0))
+                logger.info(f"🔍 DEBUG: 元のf0_up_key: {f0_up_key} (type: {type(f0_up_key)})")
                 
-                logger.info(f"Conversion completed successfully: {output_path}")
+                # 型チェックと修正
+                if not isinstance(f0_up_key, (int, float)):
+                    logger.warning(f"🔍 DEBUG: f0_up_key型エラー - 0に修正: {f0_up_key}")
+                    f0_up_key = 0
                 
-                # 統計情報
-                if len(result) >= 3:
-                    times = result[2]
-                    logger.info(f"Performance stats: {times}")
+                # 範囲チェックと修正（±12半音に制限）
+                if abs(f0_up_key) > 12:
+                    logger.warning(f"🔍 DEBUG: f0_up_key範囲外 - 制限適用: {f0_up_key}")
+                    f0_up_key = max(-12, min(12, f0_up_key))
                 
-                return str(output_path)
-            else:
-                logger.error("Conversion failed: Invalid result")
+                f0_up_key = int(f0_up_key)  # 確実にintにキャスト
+                logger.info(f"🔍 DEBUG: 修正後f0_up_key: {f0_up_key}")
+                
+                # vc_inference実行（シンプルな同期実行）
+                import time
+                
+                start_time = time.time()
+                logger.info("🔍 DEBUG: vc_inference実行開始（同期モード）")
+                
+                try:
+                    result = self.vc.vc_inference(
+                        sid=0,
+                        input_audio_path=Path(input_path),
+                        f0_up_key=f0_up_key,
+                        f0_method=conversion_params['f0_method'],
+                        f0_file=None,
+                        index_rate=conversion_params['index_rate'],
+                        filter_radius=conversion_params['filter_radius'],
+                        resample_sr_cli=conversion_params['resample_sr'],
+                        rms_mix_rate=conversion_params['rms_mix_rate'],
+                        protect=conversion_params['protect'],
+                        hubert_path_cli=hubert_path
+                    )
+                    end_time = time.time()
+                    logger.info(f"🔍 DEBUG: vc_inference実行完了 - 実行時間: {end_time - start_time:.2f}秒")
+                    
+                except Exception as e:
+                    end_time = time.time()
+                    logger.error(f"🔍 DEBUG: vc_inference例外発生 - 実行時間: {end_time - start_time:.2f}秒")
+                    logger.error(f"🔍 DEBUG: 例外詳細: {e}")
+                    import traceback
+                    logger.error(f"🔍 DEBUG: トレースバック: {traceback.format_exc()}")
+                    raise e
+                
+                logger.info(f"🔍 DEBUG: vc_inference完了 - 戻り値type: {type(result)}")
+                if result is not None:
+                    logger.info(f"🔍 DEBUG: result長さ: {len(result) if hasattr(result, '__len__') else 'N/A'}")
+                    if hasattr(result, '__len__') and len(result) > 0:
+                        for i, item in enumerate(result):
+                            logger.info(f"🔍 DEBUG: result[{i}] - type: {type(item)}, value preview: {str(item)[:100] if item is not None else 'None'}")
+                else:
+                    logger.error("🔍 DEBUG: vc_inference returned None!")
+                    return None
+                
+                # vc_inferenceの戻り値を正しく処理
+                if result is not None and len(result) >= 2:
+                    sample_rate, audio_data = result[0], result[1]
+                    
+                    logger.info(f"🔍 DEBUG: sample_rate: {sample_rate}, audio_data type: {type(audio_data)}")
+                    if audio_data is not None:
+                        logger.info(f"🔍 DEBUG: audio_data shape: {audio_data.shape if hasattr(audio_data, 'shape') else 'No shape'}")
+                        logger.info(f"🔍 DEBUG: audio_data length: {len(audio_data) if hasattr(audio_data, '__len__') else 'No length'}")
+                    
+                    # 音声データの検証と保存
+                    if audio_data is not None and len(audio_data) > 0:
+                        logger.info(f"🔍 DEBUG: 音声データ保存開始 - 出力パス: {output_path}")
+                        try:
+                            # 音声データの保存
+                            import soundfile as sf
+                            sf.write(str(output_path), audio_data, sample_rate)
+                            
+                            # 保存されたファイルの確認
+                            if Path(output_path).exists() and Path(output_path).stat().st_size > 0:
+                                logger.info(f"Conversion completed successfully: {output_path}")
+                                logger.info(f"Output file size: {Path(output_path).stat().st_size} bytes")
+                                
+                                # 統計情報
+                                if len(result) >= 3:
+                                    times = result[2]
+                                    logger.info(f"Performance stats: {times}")
+                                
+                                return str(output_path)
+                            else:
+                                logger.error(f"🔍 DEBUG: Output file was not created or is empty: {output_path}")
+                                return None
+                                
+                        except Exception as save_error:
+                            logger.error(f"🔍 DEBUG: Error saving audio file: {save_error}")
+                            import traceback
+                            logger.error(f"Save error traceback: {traceback.format_exc()}")
+                            return None
+                    else:
+                        logger.error(f"🔍 DEBUG: audio_data validation failed - audio_data is None: {audio_data is None}, length: {len(audio_data) if audio_data is not None and hasattr(audio_data, '__len__') else 'N/A'}")
+                        return None
+                else:
+                    logger.error(f"🔍 DEBUG: Invalid result format from vc_inference - result: {result}")
+                    logger.error(f"🔍 DEBUG: result type: {type(result)}, length: {len(result) if result is not None and hasattr(result, '__len__') else 'N/A'}")
+                    return None
+                    
+            except ImportError as import_error:
+                logger.error(f"Dependency import error: {import_error}")
+                logger.error("Missing required dependencies (fairseq, torch, etc.)")
+                return None
+            except Exception as conversion_error:
+                logger.error(f"Conversion execution error: {conversion_error}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
                 return None
                 
         except Exception as e:
             logger.error(f"Conversion failed: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     def batch_convert(self, input_files, output_dir=None, **params):

@@ -1,0 +1,17 @@
+{
+  "app_name": "RVC Voice Converter",
+  "version": "1.0.0",
+  "build_date": "2025-06-07 20:03:33",
+  "python_version": "3.11.9",
+  "distribution_notes": {
+    "security": "macOS Gatekeeper制限があります。初回起動時は右クリック→開くを使用してください。",
+    "requirements": "macOS 10.15以上、Poetry環境（音声変換用）",
+    "features": [
+      "Enhanced Voice Converter統合",
+      "6つの高品質音声モデル内蔵",
+      "ダークモードGUI",
+      "ログ重要度分析",
+      "MPS最適化済み"
+    ]
+  }
+}

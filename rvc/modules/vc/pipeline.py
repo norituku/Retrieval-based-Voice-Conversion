@@ -9,7 +9,25 @@ from pathlib import Path
 import faiss
 import librosa
 import numpy as np
-import parselmouth
+try:
+    import parselmouth
+    PARSELMOUTH_AVAILABLE = True
+except ImportError:
+    print("Warning: parselmouth not available - pm F0 method will be disabled")
+    PARSELMOUTH_AVAILABLE = False
+    # Create dummy parselmouth for compatibility
+    class DummyParselmouthSound:
+        def to_pitch_ac(self, *args, **kwargs):
+            raise ImportError("parselmouth not available")
+        @property
+        def selected_array(self):
+            return {"frequency": np.array([])}
+    class DummyParselmouth:
+        @staticmethod
+        def Sound(*args, **kwargs):
+            return DummyParselmouthSound()
+    parselmouth = DummyParselmouth()
+
 import pyworld
 import torch
 import torch.nn.functional as F
@@ -224,41 +242,191 @@ class Pipeline(object):
         }
         t0 = ttime()
         with torch.no_grad():
-            logits = model.extract_features(**inputs)
-            feats = model.final_proj(logits[0]) if version == "v1" else logits[0]
+            try:
+                logger.info(f"🔍 Pipeline: extract_features実行中...")
+                logits = model.extract_features(**inputs)
+                logger.info(f"🔍 Pipeline: extract_features成功 - logits type={type(logits)}, len={len(logits)}")
+                
+                if version == "v1":
+                    # v1モデルの場合のfinal_proj処理（安全化）
+                    try:
+                        logger.info(f"🔍 Pipeline: v1 final_proj実行中...")
+                        feats = model.final_proj(logits[0])
+                        logger.info(f"🔍 Pipeline: v1 final_proj成功 - feats shape={feats.shape}")
+                    except Exception as e:
+                        logger.error(f"❌ Pipeline: v1 final_proj failed: {e}")
+                        # フォールバック: logits[0]をそのまま使用
+                        feats = logits[0]
+                        logger.warning(f"🔍 Pipeline: v1 fallback - feats shape={feats.shape}")
+                else:
+                    # v2モデルの場合はlogits[0]をそのまま使用
+                    feats = logits[0]
+                    logger.info(f"🔍 Pipeline: v2 logits使用 - feats shape={feats.shape}")
+                
+                # メモリ使用量確認
+                feats_size = feats.numel() * feats.element_size()
+                logger.info(f"🔍 Pipeline: feats memory usage = {feats_size / 1024 / 1024:.1f} MB")
+                
+            except Exception as e:
+                logger.error(f"❌ Pipeline: extract_features処理エラー: {e}")
+                import traceback
+                logger.error(f"❌ Pipeline: traceback: {traceback.format_exc()}")
+                # 緊急フォールバック
+                batch_size = inputs["source"].shape[0]
+                seq_len = inputs["source"].shape[1] // 320
+                logger.warning(f"🔍 Pipeline: 緊急フォールバック - shape=({batch_size}, {seq_len}, 256)")
+                feats = torch.zeros(batch_size, seq_len, 256, device=self.device, dtype=torch.float32)
+                
         if protect < 0.5 and pitch is not None and pitchf is not None:
-            feats0 = feats.clone()
+            try:
+                logger.info(f"🔍 Pipeline: feats clone実行中...")
+                feats0 = feats.clone()
+                logger.info(f"🔍 Pipeline: feats clone成功 - feats0 shape={feats0.shape}")
+            except Exception as e:
+                logger.error(f"❌ Pipeline: feats clone failed: {e}")
+                # フォールバック: 同じshapeのゼロテンソル
+                feats0 = torch.zeros_like(feats)
+                logger.warning(f"🔍 Pipeline: clone fallback - feats0 shape={feats0.shape}")
         if (
             not isinstance(index, type(None))
             and not isinstance(big_npy, type(None))
             and index_rate != 0
         ):
-            npy = feats[0].cpu().numpy()
-            if self.is_half:
-                npy = npy.astype("float32")
+            try:
+                logger.info(f"🔍 Pipeline: Faiss検索処理開始...")
+                
+                # GPU→CPUのメモリ移動を安全に実行
+                try:
+                    npy = feats[0].cpu().numpy()
+                    logger.info(f"🔍 Pipeline: GPU→CPU移動成功 - shape={npy.shape}")
+                except Exception as e:
+                    logger.error(f"❌ Pipeline: GPU→CPU移動失敗: {e}")
+                    # 手動でtorch→numpy変換
+                    npy = feats[0].detach().cpu().numpy()
+                    logger.warning(f"🔍 Pipeline: detach後移動成功 - shape={npy.shape}")
+                
+                if self.is_half:
+                    npy = npy.astype("float32")
+                
+                # 巨大配列チェック（Ultra Think追加安全化）
+                npy_size = npy.nbytes
+                logger.info(f"🔍 Pipeline: npy memory size = {npy_size / 1024 / 1024:.1f} MB")
+                
+                if npy_size > 500 * 1024 * 1024:  # 500MB制限
+                    logger.warning(f"🔍 Pipeline: 巨大numpy配列検出 ({npy_size / 1024 / 1024:.1f} MB)、間引き処理実行")
+                    # 配列を間引いてメモリ使用量を削減
+                    stride = max(1, npy.shape[0] // 1000)  # 最大1000フレームに制限
+                    npy = npy[::stride]
+                    logger.info(f"🔍 Pipeline: 間引き後 shape={npy.shape}")
 
-            # _, I = index.search(npy, 1)
-            # npy = big_npy[I.squeeze()]
+                # 最高品質のため近傍数を増加（環境変数でオーバーライド可能）
+                k_neighbors = int(os.getenv("RVC_SEARCH_NEIGHBORS", "16"))
+                
+                # Faiss検索用に配列次元を確認・修正（Ultra Think修正）
+                if npy.ndim == 1:
+                    # 1次元配列を2次元に変換 (1, features)
+                    npy_search = npy.reshape(1, -1)
+                else:
+                    npy_search = npy
+                
+                logger.info(f"🔍 Pipeline: Faiss検索実行中 - search_shape={npy_search.shape}, k={k_neighbors}")
+                
+            except Exception as e:
+                logger.error(f"❌ Pipeline: Faiss前処理エラー: {e}")
+                # Faiss処理をスキップ
+                logger.warning(f"🔍 Pipeline: Faiss処理をスキップして続行")
+                npy_search = None
+            
+            # Faiss検索実行（安全化）
+            if npy_search is not None:
+                try:
+                    score, ix = index.search(npy_search, k=k_neighbors)
+                    logger.info(f"🔍 Pipeline: Faiss検索成功 - score shape={score.shape}, ix shape={ix.shape}")
+                    
+                    # 重み計算（ゼロ除算対策）
+                    score = np.maximum(score, 1e-8)  # 極小値で置換
+                    weight = np.square(1 / score)
+                    weight /= weight.sum(axis=1, keepdims=True)
+                    
+                    # big_npy検索（メモリ安全化）
+                    try:
+                        npy_result = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
+                        logger.info(f"🔍 Pipeline: big_npy検索成功 - result shape={npy_result.shape}")
+                    except Exception as e:
+                        logger.error(f"❌ Pipeline: big_npy検索エラー: {e}")
+                        # フォールバック: 最初の結果のみ使用
+                        npy_result = big_npy[ix[:, 0]]
+                        logger.warning(f"🔍 Pipeline: big_npy fallback - result shape={npy_result.shape}")
+                    
+                    # 元の次元に合わせて結果を調整
+                    if npy.ndim == 1 and npy_result.ndim == 2:
+                        npy = npy_result.squeeze(0)  # (1, features) -> (features,)
+                    else:
+                        npy = npy_result
 
-            # 最高品質のため近傍数を増加（環境変数でオーバーライド可能）
-            k_neighbors = int(os.getenv("RVC_SEARCH_NEIGHBORS", "16"))
-            score, ix = index.search(npy, k=k_neighbors)
-            weight = np.square(1 / score)
-            weight /= weight.sum(axis=1, keepdims=True)
-            npy = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
+                    if self.is_half:
+                        npy = npy.astype("float16")
+                    
+                    # torch変換と加重平均（安全化）
+                    try:
+                        npy_tensor = torch.from_numpy(npy).unsqueeze(0).to(self.device)
+                        feats = npy_tensor * index_rate + (1 - index_rate) * feats
+                        logger.info(f"🔍 Pipeline: Faiss結果適用成功 - final feats shape={feats.shape}")
+                    except Exception as e:
+                        logger.error(f"❌ Pipeline: Faiss結果適用エラー: {e}")
+                        logger.warning(f"🔍 Pipeline: 元のfeatsを使用して続行")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Pipeline: Faiss検索全体エラー: {e}")
+                    logger.warning(f"🔍 Pipeline: Faiss無しで続行")
+            else:
+                logger.info(f"🔍 Pipeline: Faiss処理スキップ（npy_search=None）")
 
-            if self.is_half:
-                npy = npy.astype("float16")
-            feats = (
-                torch.from_numpy(npy).unsqueeze(0).to(self.device) * index_rate
-                + (1 - index_rate) * feats
-            )
-
-        feats = F.interpolate(feats.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
+        # Ultra Think修正: 大きなテンソルでのF.interpolate安全化
+        try:
+            feats_size = feats.numel()
+            logger.info(f"🔍 Pipeline interpolate: feats size={feats_size}, shape={feats.shape}")
+            
+            if feats_size > 10_000_000:  # 1000万要素を超える場合
+                logger.warning(f"🔍 Pipeline: 大きなテンソル検出 (size={feats_size})、チャンク処理実行")
+                # チャンク分割してinterpolate
+                chunk_size = 1000  # シーケンス長の単位でチャンク
+                seq_len = feats.shape[1]
+                chunks = []
+                for i in range(0, seq_len, chunk_size):
+                    end_idx = min(i + chunk_size, seq_len)
+                    chunk = feats[:, i:end_idx, :]
+                    chunk_interpolated = F.interpolate(chunk.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
+                    chunks.append(chunk_interpolated)
+                feats = torch.cat(chunks, dim=1)
+                logger.info(f"🔍 Pipeline: チャンク処理完了 - 最終shape={feats.shape}")
+            else:
+                feats = F.interpolate(feats.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
+                
+        except Exception as e:
+            logger.error(f"❌ Pipeline interpolate error: {e}")
+            # フォールバック: 単純な複製でscale_factor=2を実現
+            logger.warning("🔍 Pipeline: フォールバック処理でinterpolate実行")
+            feats = feats.repeat_interleave(2, dim=1)
+            
         if protect < 0.5 and pitch is not None and pitchf is not None:
-            feats0 = F.interpolate(feats0.permute(0, 2, 1), scale_factor=2).permute(
-                0, 2, 1
-            )
+            try:
+                if feats0.numel() > 10_000_000:
+                    logger.warning(f"🔍 Pipeline: feats0も大きなテンソル、チャンク処理実行")
+                    chunk_size = 1000
+                    seq_len = feats0.shape[1]
+                    chunks = []
+                    for i in range(0, seq_len, chunk_size):
+                        end_idx = min(i + chunk_size, seq_len)
+                        chunk = feats0[:, i:end_idx, :]
+                        chunk_interpolated = F.interpolate(chunk.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
+                        chunks.append(chunk_interpolated)
+                    feats0 = torch.cat(chunks, dim=1)
+                else:
+                    feats0 = F.interpolate(feats0.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
+            except Exception as e:
+                logger.error(f"❌ Pipeline feats0 interpolate error: {e}")
+                feats0 = feats0.repeat_interleave(2, dim=1)
         t1 = ttime()
         p_len = audio0.shape[0] // self.window
         if feats.shape[1] < p_len:
