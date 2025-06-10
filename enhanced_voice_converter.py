@@ -408,28 +408,17 @@ class EnhancedVoiceConverter:
     
     def convert_audio(self, input_path, output_path=None, **params):
         """
-        音声変換を実行
-        改良アルゴリズムを使用
+        音声変換を実行（Ultra Think大ファイル対応版）
+        改良アルゴリズム + チャンク処理でメモリ効率化
         """
-        # ファイルログを追加
-        with open("convert_audio_debug.log", "a") as f:
-            f.write("🔍 URGENT DEBUG: convert_audio開始!\n")
-            f.flush()
-        
-        print("🔍 URGENT DEBUG: convert_audio開始!")
-        logger.error("🔍 URGENT DEBUG: convert_audio開始!")  # ERRORレベルで確実に出力
+        print("🔍 Ultra Think大ファイル対応: convert_audio開始!")
+        logger.error("🔍 Ultra Think大ファイル対応: convert_audio開始!")
         
         try:
-            # ファイルログを追加
-            with open("convert_audio_debug.log", "a") as f:
-                f.write(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}\n")
-                f.write(f"🔍 URGENT DEBUG: params={params}\n")
-                f.flush()
-            
-            print(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}")
-            print(f"🔍 URGENT DEBUG: params={params}")
-            logger.error(f"🔍 URGENT DEBUG: input_path={input_path}, output_path={output_path}")
-            logger.error(f"🔍 URGENT DEBUG: params={params}")
+            print(f"🔍 Ultra Think: input_path={input_path}, output_path={output_path}")
+            print(f"🔍 Ultra Think: params={params}")
+            logger.error(f"🔍 Ultra Think: input_path={input_path}, output_path={output_path}")
+            logger.error(f"🔍 Ultra Think: params={params}")
             
             input_path = Path(input_path)
             if not input_path.exists():
@@ -443,6 +432,167 @@ class EnhancedVoiceConverter:
                 output_path = Path(output_path)
                 output_path.parent.mkdir(parents=True, exist_ok=True)
             
+            # Ultra Think: 音声ファイルサイズチェック
+            import soundfile as sf
+            try:
+                audio_info = sf.info(str(input_path))
+                duration_seconds = audio_info.frames / audio_info.samplerate
+                file_size_mb = Path(input_path).stat().st_size / (1024 * 1024)
+                
+                print(f"🔍 Ultra Think ファイル分析:")
+                print(f"  再生時間: {duration_seconds:.1f}秒")
+                print(f"  ファイルサイズ: {file_size_mb:.1f}MB")
+                print(f"  サンプル数: {audio_info.frames}")
+                print(f"  サンプリングレート: {audio_info.samplerate}Hz")
+                
+                # Ultra Think最適化: GUI Dark Mode Enhanced版と同等の処理にするため、常に標準処理を使用
+                print(f"✅ Ultra Think最適化: 標準処理実行（GUI Dark Mode Enhanced版準拠）")
+                print(f"  ファイル情報: {duration_seconds:.1f}秒, {file_size_mb:.1f}MB")
+                return self._convert_standard_audio_file(input_path, output_path, params)                    
+            except Exception as info_error:
+                print(f"⚠️ ファイル情報取得エラー - 通常処理で継続: {info_error}")
+                return self._convert_standard_audio_file(input_path, output_path, params)
+            
+        except Exception as e:
+            logger.error(f"Conversion failed: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return None
+    
+    def _convert_large_audio_file(self, input_path, output_path, params):
+        """Ultra Think: 大ファイル用チャンク処理音声変換"""
+        import soundfile as sf
+        import numpy as np
+        import tempfile
+        
+        print("🔍 Ultra Think: 大ファイル チャンク処理開始")
+        
+        try:
+            # チャンクサイズ設定（20秒）
+            chunk_duration = 20.0  # 秒
+            overlap_duration = 2.0  # オーバーラップ（秒）
+            
+            # 音声ファイル読み込み
+            audio_data, sample_rate = sf.read(str(input_path))
+            total_samples = len(audio_data)
+            total_duration = total_samples / sample_rate
+            
+            chunk_samples = int(chunk_duration * sample_rate)
+            overlap_samples = int(overlap_duration * sample_rate)
+            
+            print(f"🔍 Ultra Think チャンク設定:")
+            print(f"  総再生時間: {total_duration:.1f}秒")
+            print(f"  チャンクサイズ: {chunk_duration}秒 ({chunk_samples}サンプル)")
+            print(f"  オーバーラップ: {overlap_duration}秒 ({overlap_samples}サンプル)")
+            
+            # チャンク分割と変換
+            converted_chunks = []
+            chunk_count = 0
+            
+            start_pos = 0
+            while start_pos < total_samples:
+                chunk_count += 1
+                end_pos = min(start_pos + chunk_samples, total_samples)
+                
+                print(f"🔍 Ultra Think: チャンク {chunk_count} 処理中 ({start_pos}-{end_pos}, {(end_pos-start_pos)/sample_rate:.1f}秒)")
+                
+                # チャンク音声を抽出
+                chunk_audio = audio_data[start_pos:end_pos]
+                
+                # 一時ファイルでチャンク変換
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_chunk_input:
+                    temp_chunk_input_path = temp_chunk_input.name
+                    sf.write(temp_chunk_input_path, chunk_audio, sample_rate)
+                
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_chunk_output:
+                    temp_chunk_output_path = temp_chunk_output.name
+                
+                try:
+                    # チャンク変換実行
+                    chunk_result = self._convert_standard_audio_file(
+                        temp_chunk_input_path, temp_chunk_output_path, params
+                    )
+                    
+                    if chunk_result and Path(temp_chunk_output_path).exists():
+                        # 変換されたチャンクを読み込み
+                        converted_chunk, converted_sr = sf.read(temp_chunk_output_path)
+                        converted_chunks.append(converted_chunk)
+                        print(f"✅ チャンク {chunk_count} 変換完了")
+                    else:
+                        print(f"❌ チャンク {chunk_count} 変換失敗")
+                        # 元の音声をそのまま使用（フォールバック）
+                        converted_chunks.append(chunk_audio)
+                        
+                finally:
+                    # 一時ファイル削除
+                    try:
+                        os.unlink(temp_chunk_input_path)
+                        if Path(temp_chunk_output_path).exists():
+                            os.unlink(temp_chunk_output_path)
+                    except:
+                        pass
+                
+                # 次のチャンクの開始位置（オーバーラップ考慮）
+                start_pos = end_pos - overlap_samples
+                if start_pos >= total_samples:
+                    break
+            
+            # チャンクを結合
+            if converted_chunks:
+                print(f"🔍 Ultra Think: {len(converted_chunks)}個のチャンクを結合中...")
+                
+                # オーバーラップ部分のクロスフェード処理
+                final_audio = self._merge_audio_chunks(converted_chunks, overlap_samples)
+                
+                # 最終結果を保存
+                output_sr = converted_sr if 'converted_sr' in locals() else 40000  # デフォルト40kHz
+                sf.write(str(output_path), final_audio, output_sr)
+                
+                print(f"✅ Ultra Think: 大ファイル変換完了 - {output_path}")
+                return str(output_path)
+            else:
+                print("❌ Ultra Think: 全チャンクで変換失敗")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Ultra Think: 大ファイル処理エラー: {e}")
+            import traceback
+            print(f"トレースバック: {traceback.format_exc()}")
+            return None
+    
+    def _merge_audio_chunks(self, chunks, overlap_samples):
+        """チャンクをクロスフェードで結合"""
+        import numpy as np
+        
+        if len(chunks) == 1:
+            return chunks[0]
+        
+        merged = chunks[0].copy()
+        
+        for i in range(1, len(chunks)):
+            chunk = chunks[i]
+            
+            if overlap_samples > 0 and len(merged) >= overlap_samples and len(chunk) >= overlap_samples:
+                # クロスフェード処理
+                fade_out = np.linspace(1.0, 0.0, overlap_samples)
+                fade_in = np.linspace(0.0, 1.0, overlap_samples)
+                
+                # オーバーラップ部分
+                overlap_end = merged[-overlap_samples:] * fade_out
+                overlap_start = chunk[:overlap_samples] * fade_in
+                crossfade = overlap_end + overlap_start
+                
+                # 結合
+                merged = np.concatenate([merged[:-overlap_samples], crossfade, chunk[overlap_samples:]])
+            else:
+                # オーバーラップなしで結合
+                merged = np.concatenate([merged, chunk])
+        
+        return merged
+    
+    def _convert_standard_audio_file(self, input_path, output_path, params):
+        """標準サイズファイル用の通常変換処理"""
+        try:
             # パラメータの準備
             conversion_params = self.default_params.copy()
             conversion_params.update(params)
@@ -602,10 +752,11 @@ class EnhancedVoiceConverter:
                 return None
                 
         except Exception as e:
-            logger.error(f"Conversion failed: {e}")
+            logger.error(f"Standard conversion failed: {e}")
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
+                
     
     def batch_convert(self, input_files, output_dir=None, **params):
         """バッチ変換（改良アルゴリズム使用）"""

@@ -67,7 +67,8 @@ class VC:
 
         logger.info(f"Loading model checkpoint: {person_model_str_path}")
         try:
-            self.cpt = torch.load(person_model_str_path, map_location="cpu")
+            # Ultra Think修正: PyTorch 2.6のweights_only問題を解決
+            self.cpt = torch.load(person_model_str_path, map_location="cpu", weights_only=False)
         except Exception as e:
             logger.error(f"Failed to load model checkpoint {person_model_str_path}: {e}", exc_info=True)
             raise
