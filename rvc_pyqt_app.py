@@ -22,6 +22,18 @@ import builtins
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'  # OpenMP スレッド数制限
 
+# Ultra Think最終修正：rmvpe環境変数を自動設定
+possible_rmvpe_dirs = [
+    "/Users/norikene_satoshi/Desktop/model_dir",
+    str(Path.cwd() / "model_dir"),
+    str(Path(__file__).parent / "model_dir")
+]
+for rmvpe_dir in possible_rmvpe_dirs:
+    if Path(rmvpe_dir).exists() and Path(rmvpe_dir + "/rmvpe.pt").exists():
+        os.environ['rmvpe_root'] = rmvpe_dir
+        print(f"✅ Ultra Think: rmvpe_root自動設定 = {rmvpe_dir}")
+        break
+
 # PyInstallerアプリ内でのbuiltin関数アクセス問題を回避
 if not hasattr(builtins, 'help'):
     def help(*args, **kwargs):
@@ -116,221 +128,406 @@ except ImportError as e:
     print(f"⚠️ 音声処理ライブラリが不足: {e}")
 
 class VoiceConversionThread(QThread):
-    """音声変換処理用スレッド"""
+    """音声変換処理用スレッド（Ultra Think最適化版）"""
+    
+    def _filter_enhanced_output(self, line):
+        """Enhanced Voice Converter出力の高度フィルタリング（GUI Dark Mode Enhanced版準拠）"""
+        import re
+        
+        # Enhanced変換の重要な進行状況ログを判定
+        enhanced_progress_patterns = [
+            r"Enhanced Pipeline starting",
+            r"Segment \d+/\d+", 
+            r"Processing.*segment",
+            r"Audio concatenation",
+            r"Enhanced Pipeline completed",
+            r"Conversion completed successfully",
+            r"✅.*processed:",
+            r"Performance stats:",
+            r"Enhanced features:",
+            r"Model loaded successfully",
+            r"Starting enhanced conversion",
+            r"RESULT:"
+        ]
+        
+        # Enhanced変換の重要な進行状況は常に表示
+        for pattern in enhanced_progress_patterns:
+            if re.search(pattern, line, re.IGNORECASE):
+                return line  # 重要な進行状況は表示
+        
+        # 詳細なデバッグログはフィルタ（大幅拡張版）
+        debug_noise_patterns = [
+            # Enhanced Pipeline デバッグ
+            r"DEBUG:.*Before size adjustment",
+            r"DEBUG:.*Pitch shapes:",
+            r"DEBUG:.*Adjusted pitch to", 
+            r"DEBUG:.*Adaptive search:",
+            r"DEBUG:.*✅ Protect processing completed",
+            r"🔍 DEBUG:.*",  # 全般的なデバッグログ
+            
+            # RVC内部処理
+            r"current directory is",
+            r"Loading faiss\.",
+            r"Successfully loaded faiss\.",
+            r"\[DEBUG.*\].*Attempting to load",
+            r"Final.*SR.*for output:",
+            r"Selected Synthesizer:",
+            r"Model weights loaded from checkpoint",
+            r"Synthesizer initialized and model loaded", 
+            r"Faiss index loaded successfully",
+            r"Pipeline initialized successfully",
+            r"\[DEBUG.*\]",
+            
+            # PyTorch/MPS関連
+            r"UserWarning:",
+            r"torch\.nn\.utils\.weight_norm",
+            r"MPS.*fallback.*CPU",
+            r"performance implications",
+            r"overwrite configs\.json",
+            r"Use mps instead",
+            r"is_half:.*device:",
+            r"No supported Nvidia GPU found",
+            r"INFO:rvc\.configs\.config:",
+            
+            # Fairseq/Hubert関連
+            r"HubertModel Config:",
+            r"HubertPretrainingTask Config:",
+            r"Hubert model loaded successfully",
+            r"Input audio will be resampled",
+            r"Loading input audio from:",
+            r"⚠️ fairseq not available",
+            
+            # 数値統計（冗長）
+            r"Stats.*min=.*max=.*mean=",
+            r"Input audio loaded\. Shape:",
+            r"f0 estimation completed\.",
+            r"Pitch.*Shape=.*Dtype=",
+            r"INFO:.*Stats: min=",
+            r"INFO:.*Shape:",
+            r"INFO:.*memory usage",
+            
+            # 繰り返しの多い技術詳細
+            r"Pipeline Args Overview:", 
+            r"Pipeline internal index_path:",
+            r"Calling self\.pipeline\.pipeline",
+            r"Returned processing times:",
+            r"VC\.vc_inference.*START",
+            r"VC\.vc_inference.*END",
+            r"INFO:rvc\.modules\.vc\.modules:",
+            r"INFO:rvc\.modules\.vc\.pipeline:",
+            r"INFO:enhanced_voice_converter:.*shape",
+            r"INFO:enhanced_voice_converter:.*type",
+            r"INFO:enhanced_voice_converter:.*memory",
+            r"🔍 Pipeline:",
+            r"🔍 DummyHubert:",
+            
+            # Deprecation warnings
+            r"FutureWarning:",
+            r"DeprecationWarning:",
+            r"PendingDeprecationWarning:"
+        ]
+        
+        # デバッグノイズパターンに一致する場合は非表示
+        for pattern in debug_noise_patterns:
+            if re.search(pattern, line, re.IGNORECASE):
+                return None  # フィルタして非表示
+        
+        return line  # その他は表示
+    # 注: _filter_enhanced_output関数は新実装では使用されません
     progress_updated = pyqtSignal(int, str)
     conversion_finished = pyqtSignal(bool, str)
     
-    def __init__(self, input_file, output_file, model_path, params, model_dir=None):
+    def __init__(self, input_file, output_file, current_model, params, model_dir=None):
         super().__init__()
         self.input_file = input_file
         self.output_file = output_file
-        self.model_path = model_path
+        self.current_model = current_model  # 修正: model_path → current_model
         self.params = params
         self.model_dir = model_dir
         
     def run(self):
-        """音声変換実行"""
+        """GUI Dark Mode版の6段階変換工程を完全移植（Ultra Think方針A）"""
         try:
-            self.progress_updated.emit(10, "音声ファイル読み込み中...")
+            # 【段階 0】プロジェクトとモデルの初期化（GUI Dark Mode版と完全同一）
+            self.progress_updated.emit(0, "プロジェクトとモデルの初期化中...")
             
-            if not AUDIO_LIBS_AVAILABLE:
-                error_msg = "❌ 必要な音声処理ライブラリ（numpy、torch、soundfile、librosa）がインストールされていません。"
-                self.conversion_finished.emit(False, error_msg)
-                return
+            # プロジェクトディレクトリを確認（GUI Dark Mode版と完全同一）
+            project_dir = str(Path.cwd())
+            if project_dir.endswith('/Resources'):
+                possible_dirs = [
+                    "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion",
+                    os.path.expanduser("~/Retrieval-based-Voice-Conversion"),
+                ]
+                for dir_path in possible_dirs:
+                    if os.path.exists(os.path.join(dir_path, "pyproject.toml")):
+                        project_dir = dir_path
+                        break
             
-            # 音声ファイル読み込み（多様なフォーマット対応）
-            audio, sr = self.load_audio_file(self.input_file)
-            self.progress_updated.emit(30, "音声データ処理中...")
+            time.sleep(0.5)  # GUI Dark Mode版と同じ視覚的フィードバック
+            self.progress_updated.emit(5, "初期化完了")
             
-            # RVC音声変換を実行（フォールバック処理なし）
-            self.progress_updated.emit(40, "RVCモデル初期化中...")
-            converted_audio = self.perform_rvc_conversion(audio, sr)
+            # 【段階 1】音声ファイルとモデルデータを読み込み（GUI Dark Mode版と完全同一）
+            self.progress_updated.emit(10, "音声ファイルとモデルデータを読み込み中...")
             
-            if converted_audio is None:
-                error_msg = "❌ RVC音声変換に失敗しました。モデルファイルや依存関係を確認してください。"
-                self.conversion_finished.emit(False, error_msg)
-                return
+            # モデル情報を構築（GUI Dark Mode版と完全同一のロジック）
+            model_path = Path(self.current_model['path'])
+            model_dir = model_path.parent
             
-            self.progress_updated.emit(70, "音声ファイル保存中...")
-            sf.write(self.output_file, converted_audio, sr)
+            # インデックスファイルを検索（GUI Dark Mode版と完全同一）
+            index_file = None
+            if self.current_model.get('has_index', False):
+                if os.path.exists(model_dir):
+                    index_files = [f for f in os.listdir(model_dir) if f.endswith('.index')]
+                    if index_files:
+                        index_file = os.path.join(model_dir, index_files[0])
             
-            self.progress_updated.emit(100, "RVC変換完了")
-            self.conversion_finished.emit(True, f"RVC変換完了: {self.output_file}")
+            time.sleep(0.5)
+            self.progress_updated.emit(15, "データ読み込み完了")
             
+            # 【段階 2】音声データの前処理開始（GUI Dark Mode版と完全同一）
+            self.progress_updated.emit(20, "音声データの前処理を開始...")
+            
+            # Hubertモデルパスを検索（GUI Dark Mode版と完全同一）
+            hubert_path = os.path.join(project_dir, "model_dir", "hubert_base.pt")
+            if not os.path.exists(hubert_path):
+                alt_hubert = os.path.join(project_dir, "model_dir", "hubert_base.pt")
+                if os.path.exists(alt_hubert):
+                    hubert_path = alt_hubert
+            
+            # Poetry環境チェック（GUI Dark Mode版と完全同一）
+            poetry_available = subprocess.run(
+                ["which", "poetry"],
+                capture_output=True,
+                text=True
+            ).returncode == 0
+            
+            if not poetry_available:
+                raise RuntimeError("Poetry not found. Please install Poetry first.")
+            
+            # GUI Dark Mode版と完全同一のコマンド構築
+            try:
+                from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE
+                USE_HARDCODED_PATH = True
+            except ImportError:
+                USE_HARDCODED_PATH = False
+            
+            if USE_HARDCODED_PATH and os.path.exists(POETRY_PYTHON_PATH):
+                cmd_array = [
+                    POETRY_PYTHON_PATH, "-m", RVC_MODULE, "infer",
+                    "-m", str(model_path),
+                    "-i", self.input_file,  # GUI Dark Mode版: 直接ファイル使用
+                    "-o", self.output_file,  # GUI Dark Mode版: 直接ファイル使用
+                    "-fu", str(self.params.get('pitch', 0)),
+                    "-fm", "rmvpe",
+                    "-ir", str(self.params.get('index_rate', 0.75)),
+                    "-fr", str(self.params.get('filter_radius', 3)),
+                    "-p", "0.33",
+                    "-rmr", "0.25"
+                ]
+                print(f"Using hardcoded Python path: {POETRY_PYTHON_PATH}")
+            else:
+                # Poetry環境のPythonパスを取得（GUI Dark Mode版と完全同一）
+                poetry_env_result = subprocess.run(
+                    ["poetry", "env", "info", "--path"],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_dir
+                )
+                
+                if poetry_env_result.returncode == 0:
+                    poetry_env_path = poetry_env_result.stdout.strip()
+                    python_path = os.path.join(poetry_env_path, "bin", "python")
+                    if os.path.exists(python_path):
+                        # 仮想環境のPythonを直接使用（GUI Dark Mode版と完全同一）
+                        cmd_array = [
+                            python_path, "-m", "rvc.wrapper.cli.cli", "infer",
+                            "-m", str(model_path),
+                            "-i", self.input_file,
+                            "-o", self.output_file,
+                            "-fu", str(self.params.get('pitch', 0)),
+                            "-fm", "rmvpe",
+                            "-ir", str(self.params.get('index_rate', 0.75)),
+                            "-fr", str(self.params.get('filter_radius', 3)),
+                            "-p", "0.33",
+                            "-rmr", "0.25"
+                        ]
+                        print(f"Using Python from: {python_path}")
+                    else:
+                        # フォールバック: poetry runを使用（GUI Dark Mode版と完全同一）
+                        cmd_array = [
+                            "poetry", "run", "rvc", "infer",
+                            "-m", str(model_path),
+                            "-i", self.input_file,
+                            "-o", self.output_file,
+                            "-fu", str(self.params.get('pitch', 0)),
+                            "-fm", "rmvpe",
+                            "-ir", str(self.params.get('index_rate', 0.75)),
+                            "-fr", str(self.params.get('filter_radius', 3)),
+                            "-p", "0.33",
+                            "-rmr", "0.25"
+                        ]
+                else:
+                    # poetry runを使用（GUI Dark Mode版と完全同一）
+                    cmd_array = [
+                        "poetry", "run", "rvc", "infer",
+                        "-m", str(model_path),
+                        "-i", self.input_file,
+                        "-o", self.output_file,
+                        "-fu", str(self.params.get('pitch', 0)),
+                        "-fm", "rmvpe",
+                        "-ir", str(self.params.get('index_rate', 0.75)),
+                        "-fr", str(self.params.get('filter_radius', 3)),
+                        "-p", "0.33",
+                        "-rmr", "0.25"
+                    ]
+            
+            # インデックスファイルとHubertパスを追加（GUI Dark Mode版と完全同一）
+            if index_file and os.path.exists(index_file):
+                cmd_array.extend(["-if", index_file])
+            
+            if os.path.exists(hubert_path):
+                cmd_array.extend(["--hubert_model_path", hubert_path])
+            
+            # 環境変数の設定（GUI Dark Mode版と完全同一）
+            env = os.environ.copy()
+            env['PYTHONPATH'] = project_dir
+            env['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+            env['rmvpe_root'] = os.path.join(
+                project_dir, 'model_dir' if os.path.exists(os.path.join(project_dir, 'model_dir', 'rmvpe.pt'))
+                else 'model_dir'
+            )
+            
+            # Conda環境変数をクリア（GUI Dark Mode版と完全同一）
+            env.pop('CONDA_DEFAULT_ENV', None)
+            env.pop('CONDA_PREFIX', None)
+            env.pop('CONDA_PYTHON_EXE', None)
+            env.pop('CONDA_EXE', None)
+            env.pop('CONDA_PROMPT_MODIFIER', None)
+            env.pop('_CE_CONDA', None)
+            env.pop('_CE_M', None)
+            
+            self.progress_updated.emit(25, "前処理完了")
+            
+            # 【段階 3-6】RVC推論の実行（GUI Dark Mode版完全移植）
+            self._run_rvc_with_progress_pyqt(cmd_array, env, project_dir)
+            
+            # 【段階 7】出力保存確認（GUI Dark Mode版と完全同一）
+            self.progress_updated.emit(95, "変換結果を保存中...")
+            time.sleep(0.5)
+            self.progress_updated.emit(100, "保存完了")
+            
+            # 出力ファイルの確認（GUI Dark Mode版と完全同一）
+            if Path(self.output_file).exists():
+                file_size = Path(self.output_file).stat().st_size
+                print(f"✅ 変換結果ファイル確認OK - サイズ: {file_size} bytes")
+                if file_size > 0:
+                    self.conversion_finished.emit(True, f"RVC変換完了: {self.output_file}")
+                else:
+                    raise Exception(f"結果ファイルが空です: {self.output_file}")
+            else:
+                raise Exception(f"出力ファイルが作成されていません: {self.output_file}")
+                
         except Exception as e:
-            error_msg = f"❌ 音声変換中にエラーが発生: {str(e)}"
+            error_msg = f"❌ GUI Dark Mode版6段階変換工程でエラー: {str(e)}"
             print(error_msg)
             import traceback
             detailed_error = traceback.format_exc()
             print(f"詳細エラー: {detailed_error}")
             self.conversion_finished.emit(False, error_msg)
     
-    def perform_rvc_conversion(self, audio, sr):
-        """Enhanced Voice Converterを使用した実際のRVC音声変換"""
-        print(f"🔍 DEBUG: RVC変換開始 - 音声shape: {audio.shape}, sr: {sr}")
-        try:
-            # Enhanced Voice Converterをインポート（エラーハンドリング強化）
-            try:
-                # PyInstallerアプリの場合、_internalディレクトリを追加
-                current_dir = Path.cwd()
-                internal_dir = current_dir / "_internal"
-                if internal_dir.exists():
-                    sys.path.insert(0, str(internal_dir))
-                    print(f"🔍 DEBUG: _internalディレクトリをsys.pathに追加: {internal_dir}")
-                else:
-                    sys.path.append(str(current_dir))
-                    print(f"🔍 DEBUG: 現在ディレクトリをsys.pathに追加: {current_dir}")
-                
-                from enhanced_voice_converter import EnhancedVoiceConverter
-                print("🔍 DEBUG: Enhanced Voice Converter インポート成功")
-            except ImportError as import_error:
-                error_msg = str(import_error)
-                print(f"🔍 DEBUG: Enhanced Voice Converter インポートエラー: {error_msg}")
-                
-                if "fairseq" in error_msg.lower():
-                    raise Exception("🚨 RVC変換に必要なfairseqライブラリがインストールされていません。\n💡 解決方法: pip install fairseq を実行してください。")
-                elif "rvc" in error_msg.lower():
-                    raise Exception("🚨 RVCモジュールが見つかりません。\n💡 解決方法: RVCライブラリが正しくインストールされていない可能性があります。")
-                else:
-                    raise Exception(f"🚨 Enhanced Voice Converterの依存関係エラー: {error_msg}")
-            
-            # 実行ディレクトリを取得
-            if getattr(sys, 'frozen', False):
-                app_dir = Path(sys.executable).parent
-            else:
-                app_dir = Path.cwd()
-            
-            print(f"🔍 DEBUG: app_dir: {app_dir}")
-            
-            # モデルディレクトリを決定
-            model_dir_path = str(self.model_dir) if self.model_dir else str(app_dir / "model_dir")
-            print(f"🔍 DEBUG: 使用するモデルディレクトリ: {model_dir_path}")
-            
-            # モデルディレクトリの存在確認
-            if not Path(model_dir_path).exists():
-                raise Exception(f"🚨 モデルディレクトリが存在しません: {model_dir_path}\n💡 解決方法: 正しいモデルディレクトリを選択してください。")
-            
-            # Enhanced Voice Converterを初期化（エラーハンドリング強化）
-            try:
-                converter = EnhancedVoiceConverter(
-                    model_dir=model_dir_path,
-                    output_dir=str(app_dir / "enhanced_output")
-                )
-                print("🔍 DEBUG: Enhanced Voice Converter 初期化成功")
-            except ImportError as init_import_error:
-                raise Exception(f"🚨 RVC依存関係エラー: {init_import_error}\n💡 解決方法: 必要な依存ライブラリをインストールしてください。")
-            except RuntimeError as init_runtime_error:
-                raise Exception(f"🚨 Enhanced Voice Converter初期化エラー: {init_runtime_error}")
-            except Exception as init_error:
-                raise Exception(f"🚨 初期化中に予期しないエラーが発生: {init_error}")
-            
-            # 一時ファイルを作成して音声変換を実行
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_input:
-                temp_input_path = temp_input.name
-                sf.write(temp_input_path, audio, sr)
-            
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_output:
-                temp_output_path = temp_output.name
-            
-            try:
-                # 利用可能なモデル一覧を取得
-                print("🔍 DEBUG: モデル一覧取得開始...")
-                models = converter.list_available_models()
-                print(f"🔍 DEBUG: 検出されたモデル数: {len(models)}")
-                if not models:
-                    raise Exception("利用可能な音声モデルが見つかりません")
-                
-                # 最初のモデルを使用
-                selected_model = models[0]
-                print(f"🔍 DEBUG: 選択されたモデル: {selected_model['name']}")
-                print(f"🔍 DEBUG: モデルパス: {selected_model['path']}")
-                
-                # モデルを読み込み
-                print("🔍 DEBUG: モデル読み込み開始...")
-                load_result = converter.load_model(
-                    selected_model['path'],
-                    selected_model.get('index_path'),
-                    self.params.get('index_rate', 0.7)
-                )
-                print(f"🔍 DEBUG: モデル読み込み結果: {load_result}")
-                
-                # 音声変換実行
-                print("🔍 DEBUG: 音声変換実行開始...")
-                print(f"🔍 DEBUG: 入力パス: {temp_input_path}")
-                print(f"🔍 DEBUG: 出力パス: {temp_output_path}")
-                print(f"🔍 DEBUG: パラメータ: pitch={self.params.get('pitch', 0)}, index_rate={self.params.get('index_rate', 0.7)}")
-                
-                # コンバーターオブジェクトの詳細確認
-                print(f"🔍 URGENT DEBUG: converter type: {type(converter)}")
-                print(f"🔍 URGENT DEBUG: converter.__class__.__name__: {converter.__class__.__name__}")
-                print(f"🔍 URGENT DEBUG: converter.convert_audio method: {converter.convert_audio}")
-                print(f"🔍 URGENT DEBUG: hasattr(converter, 'convert_audio'): {hasattr(converter, 'convert_audio')}")
-                
-                # 入力ファイルの存在確認
-                if not Path(temp_input_path).exists():
-                    raise Exception(f"入力ファイルが存在しません: {temp_input_path}")
-                print(f"🔍 DEBUG: 入力ファイル確認OK - サイズ: {Path(temp_input_path).stat().st_size} bytes")
-                
-                print("🔍 URGENT DEBUG: convert_audio呼び出し直前!!!")
-                result_path = converter.convert_audio(
-                    input_path=temp_input_path,
-                    output_path=temp_output_path,
-                    f0_up_key=self.params.get('pitch', 0),
-                    filter_radius=self.params.get('filter_radius', 3),
-                    index_rate=self.params.get('index_rate', 0.7),
-                    f0_method="rmvpe"
-                )
-                print(f"🔍 DEBUG: 音声変換結果パス: {result_path}")
-                print(f"🔍 DEBUG: 結果パスtype: {type(result_path)}")
-                
-                if result_path:
-                    print(f"🔍 DEBUG: convert_audio成功 - result_path: {result_path}")
+    def _run_rvc_with_progress_pyqt(self, cmd_array, env, project_dir):
+        """GUI Dark Mode版の_run_rvc_with_progressを完全移植（PyQt版）"""
+        
+        print(f"🔧 実行コマンド: {' '.join(cmd_array)}")
+        print(f"🔧 作業ディレクトリ: {project_dir}")
+        
+        # 【段階 3】特徴抽出開始（GUI Dark Mode版と完全同一）
+        self.progress_updated.emit(30, "音声の特徴を抽出中...")
+        
+        process = subprocess.Popen(
+            cmd_array,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+            env=env,
+            cwd=project_dir
+        )
+        
+        current_stage = 3  # 特徴抽出ステージ（GUI Dark Mode版と完全同一）
+        line_count = 0
+        total_lines_estimate = 100  # 推定行数
+        
+        # GUI Dark Mode版と完全同一のログ処理とプログレス追跡
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                line = line.strip()
+                if line:
+                    print(f"RVC: {line}")
+                    line_count += 1
                     
-                    # result_pathが実際にファイルパスを指しているか確認
-                    if Path(result_path).exists():
-                        output_size = Path(result_path).stat().st_size
-                        print(f"🔍 DEBUG: 結果ファイル確認OK - サイズ: {output_size} bytes")
-                        if output_size > 0:
-                            # 変換された音声を読み込み
-                            print("🔍 DEBUG: 変換結果音声読み込み開始...")
-                            converted_audio, _ = sf.read(result_path)
-                            print(f"🔍 DEBUG: 読み込み完了 - shape: {converted_audio.shape}")
-                            return converted_audio
-                        else:
-                            raise Exception(f"結果ファイルが空です: {result_path}")
-                    else:
-                        # result_pathで指定されたファイルが存在しない場合、temp_output_pathを確認
-                        print(f"🔍 DEBUG: result_pathのファイルが見つからない、temp_output_pathを確認: {temp_output_path}")
-                        if Path(temp_output_path).exists():
-                            output_size = Path(temp_output_path).stat().st_size
-                            print(f"🔍 DEBUG: temp出力ファイル確認OK - サイズ: {output_size} bytes")
-                            if output_size > 0:
-                                # 変換された音声を読み込み
-                                print("🔍 DEBUG: temp変換結果音声読み込み開始...")
-                                converted_audio, _ = sf.read(temp_output_path)
-                                print(f"🔍 DEBUG: temp読み込み完了 - shape: {converted_audio.shape}")
-                                return converted_audio
-                            else:
-                                raise Exception(f"temp出力ファイルが空です: {temp_output_path}")
-                        else:
-                            raise Exception(f"出力ファイルが作成されていません: result_path={result_path}, temp_output_path={temp_output_path}")
-                else:
-                    raise Exception("音声変換に失敗しました（result_pathがNone）")
+                    # 行数に基づく進捗更新（GUI Dark Mode版と完全同一）
+                    stage_progress = min((line_count / total_lines_estimate) * 100, 100)
                     
-            finally:
-                # 一時ファイルを削除
-                try:
-                    os.unlink(temp_input_path)
-                    os.unlink(temp_output_path)
-                except:
-                    pass
+                    # キーワードによる進捗とステージの推定（GUI Dark Mode版と完全同一）
+                    if "Loading" in line or "loading" in line:
+                        progress_val = 30 + int(stage_progress * 0.1)
+                        self.progress_updated.emit(progress_val, "モデルを読み込み中...")
+                    elif "Extract" in line or "extract" in line:
+                        if current_stage == 3:
+                            progress_val = 35 + int(stage_progress * 0.2)
+                            self.progress_updated.emit(progress_val, "特徴抽出を実行中...")
+                    elif "Process" in line or "process" in line:
+                        if current_stage < 4:
+                            # ステージ4: モデル推論に移行（GUI Dark Mode版と完全同一）
+                            self.progress_updated.emit(55, "特徴抽出完了")
+                            current_stage = 4
+                            self.progress_updated.emit(60, "AIモデルで音声を変換中...")
+                        progress_val = 60 + int(stage_progress * 0.15)
+                        self.progress_updated.emit(progress_val, "音声変換を処理中...")
+                    elif "Generate" in line or "generate" in line:
+                        progress_val = 75 + int(stage_progress * 0.1)
+                        self.progress_updated.emit(progress_val, "音声を生成中...")
+                    elif "Save" in line or "save" in line or "Write" in line or "write" in line:
+                        if current_stage < 5:
+                            # ステージ5: 後処理に移行（GUI Dark Mode版と完全同一）
+                            self.progress_updated.emit(85, "音声変換完了")
+                            current_stage = 5
+                            self.progress_updated.emit(88, "音質の最適化を実行中...")
+                        progress_val = 88 + int(stage_progress * 0.05)
+                        self.progress_updated.emit(progress_val, "最適化処理中...")
                     
-        except Exception as e:
-            print(f"🔍 DEBUG: RVC変換でエラー発生: {e}")
-            import traceback
-            print(f"🔍 DEBUG: 詳細トレースバック: {traceback.format_exc()}")
-            raise Exception(f"Enhanced Voice Converter使用中にエラー: {e}")
+                    # 進捗の詳細表示（GUI Dark Mode版と完全同一）
+                    if line_count % 5 == 0:  # 5行ごとに更新
+                        if current_stage == 3:
+                            progress = min(35 + stage_progress * 0.2, 54)
+                            self.progress_updated.emit(int(progress), f"特徴抽出中... ({line_count}行処理)")
+                        elif current_stage == 4:
+                            progress = min(60 + stage_progress * 0.15, 74)
+                            self.progress_updated.emit(int(progress), f"音声変換中... ({line_count}行処理)")
+                        elif current_stage == 5:
+                            progress = min(88 + stage_progress * 0.05, 92)
+                            self.progress_updated.emit(int(progress), f"後処理中... ({line_count}行処理)")
+        
+        process.wait()
+        
+        # エラーチェック（GUI Dark Mode版と完全同一）
+        if process.returncode != 0:
+            error_msg = f"RVC inference failed with return code: {process.returncode}"
+            print(f"ERROR: {error_msg}")
+            raise RuntimeError(error_msg)
+        
+        # 処理完了を確認（GUI Dark Mode版と完全同一）
+        if current_stage == 3:
+            self.progress_updated.emit(55, "特徴抽出完了")
+            self.progress_updated.emit(85, "音声変換完了")
+            self.progress_updated.emit(93, "後処理完了")
+        elif current_stage == 4:
+            self.progress_updated.emit(85, "音声変換完了")
+            self.progress_updated.emit(93, "後処理完了")
+        elif current_stage == 5:
+            self.progress_updated.emit(93, "後処理完了")
     
     def load_audio_file(self, file_path):
         """多様な音声フォーマットに対応した音声ファイル読み込み"""
@@ -597,8 +794,8 @@ class RVCMainWindow(QMainWindow):
         layout.addWidget(QLabel("インデックス比率:"), 1, 0)
         self.index_slider = QSlider(Qt.Horizontal)
         self.index_slider.setRange(0, 100)
-        self.index_slider.setValue(70)
-        self.index_label = QLabel("0.70")
+        self.index_slider.setValue(75)  # CLI版デフォルト0.75に合わせる
+        self.index_label = QLabel("0.75")
         self.index_slider.valueChanged.connect(
             lambda v: self.index_label.setText(f"{v/100:.2f}")
         )
@@ -804,7 +1001,7 @@ class RVCMainWindow(QMainWindow):
         
         # 変換スレッド開始
         self.conversion_thread = VoiceConversionThread(
-            input_file, output_file, self.current_model['path'], params, self.model_dir
+            input_file, output_file, self.current_model, params, self.model_dir
         )
         self.conversion_thread.progress_updated.connect(self.update_progress)
         self.conversion_thread.conversion_finished.connect(self.conversion_finished)
