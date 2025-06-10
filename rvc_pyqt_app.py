@@ -22,17 +22,35 @@ import builtins
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'  # OpenMP スレッド数制限
 
-# Ultra Think最終修正：rmvpe環境変数を自動設定
-possible_rmvpe_dirs = [
-    "/Users/norikene_satoshi/Desktop/model_dir",
-    str(Path.cwd() / "model_dir"),
-    str(Path(__file__).parent / "model_dir")
-]
-for rmvpe_dir in possible_rmvpe_dirs:
-    if Path(rmvpe_dir).exists() and Path(rmvpe_dir + "/rmvpe.pt").exists():
-        os.environ['rmvpe_root'] = rmvpe_dir
-        print(f"✅ Ultra Think: rmvpe_root自動設定 = {rmvpe_dir}")
-        break
+# Ultra Think汎用化：環境非依存rmvpe自動検出
+def find_rmvpe_model():
+    """rmvpeモデルを汎用的に検索"""
+    possible_rmvpe_dirs = [
+        # 1. プロジェクト内のmodel_dir
+        Path(__file__).parent / "model_dir",
+        Path.cwd() / "model_dir",
+        # 2. ユーザーのデスクトップ
+        Path.home() / "Desktop" / "model_dir",
+        # 3. ユーザーのDocuments
+        Path.home() / "Documents" / "model_dir",
+        # 4. アプリケーションサポート
+        Path.home() / "Library" / "Application Support" / "RVC" / "model_dir",
+        # 5. 共通の場所
+        Path("/usr/local/share/rvc/model_dir"),
+        Path("/opt/rvc/model_dir")
+    ]
+    
+    for rmvpe_dir in possible_rmvpe_dirs:
+        rmvpe_file = rmvpe_dir / "rmvpe.pt"
+        if rmvpe_dir.exists() and rmvpe_file.exists():
+            os.environ['rmvpe_root'] = str(rmvpe_dir)
+            print(f"✅ Ultra Think汎用化: rmvpe_root自動検出 = {rmvpe_dir}")
+            return str(rmvpe_dir)
+    
+    print("⚠️ rmvpe.ptが見つかりません。手動でmodel_dirを配置してください。")
+    return None
+
+find_rmvpe_model()
 
 # PyInstallerアプリ内でのbuiltin関数アクセス問題を回避
 if not hasattr(builtins, 'help'):
@@ -251,17 +269,8 @@ class VoiceConversionThread(QThread):
             # 【段階 0】プロジェクトとモデルの初期化（GUI Dark Mode版と完全同一）
             self.progress_updated.emit(0, "プロジェクトとモデルの初期化中...")
             
-            # プロジェクトディレクトリを確認（GUI Dark Mode版と完全同一）
-            project_dir = str(Path.cwd())
-            if project_dir.endswith('/Resources'):
-                possible_dirs = [
-                    "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion",
-                    os.path.expanduser("~/Retrieval-based-Voice-Conversion"),
-                ]
-                for dir_path in possible_dirs:
-                    if os.path.exists(os.path.join(dir_path, "pyproject.toml")):
-                        project_dir = dir_path
-                        break
+            # プロジェクトディレクトリを動的検出（Ultra Think汎用化）
+            project_dir = self._detect_project_directory()
             
             time.sleep(0.5)  # GUI Dark Mode版と同じ視覚的フィードバック
             self.progress_updated.emit(5, "初期化完了")
@@ -304,82 +313,8 @@ class VoiceConversionThread(QThread):
             if not poetry_available:
                 raise RuntimeError("Poetry not found. Please install Poetry first.")
             
-            # GUI Dark Mode版と完全同一のコマンド構築
-            try:
-                from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE
-                USE_HARDCODED_PATH = True
-            except ImportError:
-                USE_HARDCODED_PATH = False
-            
-            if USE_HARDCODED_PATH and os.path.exists(POETRY_PYTHON_PATH):
-                cmd_array = [
-                    POETRY_PYTHON_PATH, "-m", RVC_MODULE, "infer",
-                    "-m", str(model_path),
-                    "-i", self.input_file,  # GUI Dark Mode版: 直接ファイル使用
-                    "-o", self.output_file,  # GUI Dark Mode版: 直接ファイル使用
-                    "-fu", str(self.params.get('pitch', 0)),
-                    "-fm", "rmvpe",
-                    "-ir", str(self.params.get('index_rate', 0.75)),
-                    "-fr", str(self.params.get('filter_radius', 3)),
-                    "-p", "0.33",
-                    "-rmr", "0.25"
-                ]
-                print(f"Using hardcoded Python path: {POETRY_PYTHON_PATH}")
-            else:
-                # Poetry環境のPythonパスを取得（GUI Dark Mode版と完全同一）
-                poetry_env_result = subprocess.run(
-                    ["poetry", "env", "info", "--path"],
-                    capture_output=True,
-                    text=True,
-                    cwd=project_dir
-                )
-                
-                if poetry_env_result.returncode == 0:
-                    poetry_env_path = poetry_env_result.stdout.strip()
-                    python_path = os.path.join(poetry_env_path, "bin", "python")
-                    if os.path.exists(python_path):
-                        # 仮想環境のPythonを直接使用（GUI Dark Mode版と完全同一）
-                        cmd_array = [
-                            python_path, "-m", "rvc.wrapper.cli.cli", "infer",
-                            "-m", str(model_path),
-                            "-i", self.input_file,
-                            "-o", self.output_file,
-                            "-fu", str(self.params.get('pitch', 0)),
-                            "-fm", "rmvpe",
-                            "-ir", str(self.params.get('index_rate', 0.75)),
-                            "-fr", str(self.params.get('filter_radius', 3)),
-                            "-p", "0.33",
-                            "-rmr", "0.25"
-                        ]
-                        print(f"Using Python from: {python_path}")
-                    else:
-                        # フォールバック: poetry runを使用（GUI Dark Mode版と完全同一）
-                        cmd_array = [
-                            "poetry", "run", "rvc", "infer",
-                            "-m", str(model_path),
-                            "-i", self.input_file,
-                            "-o", self.output_file,
-                            "-fu", str(self.params.get('pitch', 0)),
-                            "-fm", "rmvpe",
-                            "-ir", str(self.params.get('index_rate', 0.75)),
-                            "-fr", str(self.params.get('filter_radius', 3)),
-                            "-p", "0.33",
-                            "-rmr", "0.25"
-                        ]
-                else:
-                    # poetry runを使用（GUI Dark Mode版と完全同一）
-                    cmd_array = [
-                        "poetry", "run", "rvc", "infer",
-                        "-m", str(model_path),
-                        "-i", self.input_file,
-                        "-o", self.output_file,
-                        "-fu", str(self.params.get('pitch', 0)),
-                        "-fm", "rmvpe",
-                        "-ir", str(self.params.get('index_rate', 0.75)),
-                        "-fr", str(self.params.get('filter_radius', 3)),
-                        "-p", "0.33",
-                        "-rmr", "0.25"
-                    ]
+            # Ultra Think汎用化: 動的Poetry環境検出
+            cmd_array = self._build_rvc_command(project_dir, model_path)
             
             # インデックスファイルとHubertパスを追加（GUI Dark Mode版と完全同一）
             if index_file and os.path.exists(index_file):
@@ -434,6 +369,122 @@ class VoiceConversionThread(QThread):
             detailed_error = traceback.format_exc()
             print(f"詳細エラー: {detailed_error}")
             self.conversion_finished.emit(False, error_msg)
+    
+    def _detect_project_directory(self):
+        """プロジェクトディレクトリを環境非依存で検出（Ultra Think汎用化）"""
+        # 1. 現在の作業ディレクトリから開始
+        current_dir = Path.cwd()
+        
+        # 2. PyInstallerアプリの場合は特別処理
+        if str(current_dir).endswith('/Resources') or str(current_dir).endswith('/MacOS'):
+            possible_project_names = [
+                "Retrieval-based-Voice-Conversion",
+                "rvc",
+                "RVC",
+                "voice-converter"
+            ]
+            
+            # ホームディレクトリ内を検索
+            home_dir = Path.home()
+            for project_name in possible_project_names:
+                project_path = home_dir / project_name
+                if project_path.exists() and (project_path / "pyproject.toml").exists():
+                    print(f"✅ Ultra Think汎用化: プロジェクトディレクトリ検出 = {project_path}")
+                    return str(project_path)
+            
+            # デスクトップ内を検索
+            desktop_dir = home_dir / "Desktop"
+            for project_name in possible_project_names:
+                project_path = desktop_dir / project_name
+                if project_path.exists() and (project_path / "pyproject.toml").exists():
+                    print(f"✅ Ultra Think汎用化: プロジェクトディレクトリ検出 = {project_path}")
+                    return str(project_path)
+            
+            # ドキュメント内を検索
+            documents_dir = home_dir / "Documents"
+            for project_name in possible_project_names:
+                project_path = documents_dir / project_name
+                if project_path.exists() and (project_path / "pyproject.toml").exists():
+                    print(f"✅ Ultra Think汎用化: プロジェクトディレクトリ検出 = {project_path}")
+                    return str(project_path)
+        
+        # 3. 現在のディレクトリまたは親ディレクトリにpyproject.tomlがあるかチェック
+        check_dir = current_dir
+        for _ in range(5):  # 最大5レベル上まで探索
+            if (check_dir / "pyproject.toml").exists():
+                print(f"✅ Ultra Think汎用化: プロジェクトディレクトリ検出 = {check_dir}")
+                return str(check_dir)
+            check_dir = check_dir.parent
+            if check_dir == check_dir.parent:  # ルートディレクトリに到達
+                break
+        
+        # 4. 現在のディレクトリをそのまま使用（フォールバック）
+        print(f"⚠️ pyproject.tomlが見つかりません。現在のディレクトリを使用: {current_dir}")
+        return str(current_dir)
+    
+    def _build_rvc_command(self, project_dir, model_path):
+        """RVCコマンドを環境非依存で構築（Ultra Think汎用化）"""
+        # 1. ハードコーディングされた設定を試行（互換性維持）
+        try:
+            from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE
+            if os.path.exists(POETRY_PYTHON_PATH):
+                print(f"✅ Ultra Think汎用化: rvc_config使用 = {POETRY_PYTHON_PATH}")
+                return [
+                    POETRY_PYTHON_PATH, "-m", RVC_MODULE, "infer",
+                    "-m", str(model_path),
+                    "-i", self.input_file,
+                    "-o", self.output_file,
+                    "-fu", str(self.params.get('pitch', 0)),
+                    "-fm", "rmvpe",
+                    "-ir", str(self.params.get('index_rate', 0.75)),
+                    "-fr", str(self.params.get('filter_radius', 3)),
+                    "-p", "0.33",
+                    "-rmr", "0.25"
+                ]
+        except ImportError:
+            print("📝 Ultra Think汎用化: rvc_configなし、動的検出開始")
+        
+        # 2. Poetry環境を動的検出
+        poetry_env_result = subprocess.run(
+            ["poetry", "env", "info", "--path"],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        
+        if poetry_env_result.returncode == 0:
+            poetry_env_path = poetry_env_result.stdout.strip()
+            python_path = os.path.join(poetry_env_path, "bin", "python")
+            
+            if os.path.exists(python_path):
+                print(f"✅ Ultra Think汎用化: Poetry環境検出 = {python_path}")
+                return [
+                    python_path, "-m", "rvc.wrapper.cli.cli", "infer",
+                    "-m", str(model_path),
+                    "-i", self.input_file,
+                    "-o", self.output_file,
+                    "-fu", str(self.params.get('pitch', 0)),
+                    "-fm", "rmvpe",
+                    "-ir", str(self.params.get('index_rate', 0.75)),
+                    "-fr", str(self.params.get('filter_radius', 3)),
+                    "-p", "0.33",
+                    "-rmr", "0.25"
+                ]
+        
+        # 3. poetry runを使用（フォールバック）
+        print("✅ Ultra Think汎用化: poetry runフォールバック使用")
+        return [
+            "poetry", "run", "rvc", "infer",
+            "-m", str(model_path),
+            "-i", self.input_file,
+            "-o", self.output_file,
+            "-fu", str(self.params.get('pitch', 0)),
+            "-fm", "rmvpe",
+            "-ir", str(self.params.get('index_rate', 0.75)),
+            "-fr", str(self.params.get('filter_radius', 3)),
+            "-p", "0.33",
+            "-rmr", "0.25"
+        ]
     
     def _run_rvc_with_progress_pyqt(self, cmd_array, env, project_dir):
         """GUI Dark Mode版の_run_rvc_with_progressを完全移植（PyQt版）"""
@@ -623,7 +674,7 @@ class RVCMainWindow(QMainWindow):
             # 開発環境で実行されている場合
             app_dir = Path.cwd()
         
-        self.model_dir = app_dir / "model_dir"
+        self.model_dir = self._detect_model_directory()
         self.output_dir = app_dir / "enhanced_output"
         self.output_dir.mkdir(exist_ok=True)
         
@@ -1056,12 +1107,50 @@ class RVCMainWindow(QMainWindow):
         else:
             app_dir = Path.cwd()
         
-        self.model_dir = app_dir / "model_dir"
+        self.model_dir = self._detect_model_directory()
         self.model_dir_label.setText(str(self.model_dir))
         self.log_message(f"🔄 モデルディレクトリをデフォルトに戻しました: {self.model_dir}")
         
         # モデルを再読み込み
         self.load_models()
+    
+    def _detect_model_directory(self):
+        """モデルディレクトリを環境非依存で検出（Ultra Think汎用化）"""
+        possible_model_dirs = [
+            # 1. プロジェクト内のmodel_dir
+            Path(__file__).parent / "model_dir",
+            Path.cwd() / "model_dir",
+            # 2. ユーザーのデスクトップ
+            Path.home() / "Desktop" / "model_dir",
+            # 3. ユーザーのDocuments
+            Path.home() / "Documents" / "model_dir",
+            Path.home() / "Documents" / "RVC" / "model_dir",
+            # 4. アプリケーションサポート
+            Path.home() / "Library" / "Application Support" / "RVC" / "model_dir",
+            # 5. 共通の場所
+            Path("/usr/local/share/rvc/model_dir"),
+            Path("/opt/rvc/model_dir"),
+            # 6. PyInstallerアプリの場合
+            Path(sys.executable).parent / "model_dir" if getattr(sys, 'frozen', False) else None
+        ]
+        
+        # None要素を削除
+        possible_model_dirs = [d for d in possible_model_dirs if d is not None]
+        
+        for model_dir in possible_model_dirs:
+            if model_dir.exists():
+                # .pthファイルまたはrmvpe.ptがあるかチェック
+                if (list(model_dir.rglob("*.pth")) or 
+                    (model_dir / "rmvpe.pt").exists() or
+                    (model_dir / "hubert_base.pt").exists()):
+                    print(f"✅ Ultra Think汎用化: model_dir検出 = {model_dir}")
+                    return model_dir
+        
+        # フォールバック: デフォルトの場所を作成
+        default_model_dir = Path.cwd() / "model_dir"
+        print(f"📁 Ultra Think汎用化: デフォルトmodel_dir作成 = {default_model_dir}")
+        default_model_dir.mkdir(exist_ok=True)
+        return default_model_dir
 
 def main():
     """メイン関数"""
