@@ -212,3 +212,7 @@ xcuserdata/
 test_*_*.py
 *_temp.py
 *_tmp.py
+
+# 開発中の最適化試験版
+rvc_pyqt_app_optimized.py
+rvc_pyqt_optimized.py
