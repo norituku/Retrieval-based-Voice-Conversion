@@ -413,39 +413,81 @@ class StandaloneVoiceConversionThread(QThread):
             raise Exception(f"出力ファイルが作成されていません: {self.output_file}")
 
 class ModelCard(QFrame):
-    """音声モデルカード表示"""
+    """音声モデルカード表示（Ultra Think視覚改善版）"""
     
     def __init__(self, model_info):
         super().__init__()
         self.model_info = model_info
+        self.is_selected = False
         self.setup_ui()
+        self.apply_default_style()
         
     def setup_ui(self):
-        """UIセットアップ"""
+        """UIセットアップ（Ultra Think改善版）"""
         self.setFrameStyle(QFrame.StyledPanel)
-        self.setFixedHeight(120)
+        self.setFixedHeight(130)
+        self.setCursor(Qt.PointingHandCursor)
         
         layout = QVBoxLayout()
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(4)
         
-        # モデル名
+        # モデル名（改善版）
         name_label = QLabel(self.model_info.get('name', 'Unknown Model'))
         name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        name_label.setStyleSheet("color: #ffffff; margin-bottom: 2px;")
         layout.addWidget(name_label)
         
-        # ファイルパス
-        path_label = QLabel(f"Path: {self.model_info.get('path', 'N/A')}")
-        path_label.setFont(QFont("Arial", 9))
+        # ファイルパス（改善版）
+        path_text = self.model_info.get('path', 'N/A')
+        if len(path_text) > 50:
+            path_text = "..." + path_text[-47:]
+        path_label = QLabel(f"Path: {path_text}")
+        path_label.setFont(QFont("Arial", 8))
+        path_label.setStyleSheet("color: #cccccc;")
         path_label.setWordWrap(True)
         layout.addWidget(path_label)
         
-        # インデックス情報
+        # インデックス情報（改善版）
         has_index = self.model_info.get('has_index', False)
         index_label = QLabel(f"Index: {'あり' if has_index else 'なし'}")
-        index_label.setFont(QFont("Arial", 9))
-        index_label.setStyleSheet(f"color: {'green' if has_index else 'orange'};")
+        index_label.setFont(QFont("Arial", 9, QFont.Bold))
+        index_color = "#4CAF50" if has_index else "#FF9800"
+        index_label.setStyleSheet(f"color: {index_color}; margin-top: 2px;")
         layout.addWidget(index_label)
         
         self.setLayout(layout)
+    
+    def apply_default_style(self):
+        """デフォルトスタイル適用（Ultra Think）"""
+        self.setStyleSheet("""
+            ModelCard {
+                background-color: #2d2d30;
+                border: 1px solid #404042;
+                border-radius: 6px;
+                margin: 2px;
+            }
+            ModelCard:hover {
+                background-color: #3d3d40;
+                border: 1px solid #555558;
+            }
+        """)
+        self.is_selected = False
+    
+    def apply_selected_style(self):
+        """選択状態スタイル適用（Ultra Think）"""
+        self.setStyleSheet("""
+            ModelCard {
+                background-color: #1e3a5f;
+                border: 2px solid #2A82DA;
+                border-radius: 6px;
+                margin: 2px;
+            }
+            ModelCard:hover {
+                background-color: #264a6f;
+            }
+        """)
+        self.is_selected = True
 
 class RVCStandaloneMainWindow(QMainWindow):
     """RVC 完全独立版メインウィンドウ（Ultra Think）"""
@@ -503,7 +545,7 @@ class RVCStandaloneMainWindow(QMainWindow):
         central_widget.setLayout(main_layout)
         
     def create_model_panel(self):
-        """モデル選択パネル作成"""
+        """モデル選択パネル作成（Ultra Think改善版）"""
         panel = QGroupBox("音声モデル")
         layout = QVBoxLayout()
         
@@ -516,10 +558,41 @@ class RVCStandaloneMainWindow(QMainWindow):
         refresh_btn.clicked.connect(self.load_models)
         layout.addWidget(refresh_btn)
         
-        # モデル一覧（スクロール可能）
+        # モデル一覧（スクロール可能）- Ultra Think改善版
         scroll_area = QScrollArea()
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #404042;
+                border-radius: 4px;
+                background-color: #232325;
+            }
+            QScrollArea QWidget {
+                background-color: #232325;
+            }
+            QScrollBar:vertical {
+                background-color: #2d2d30;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #555558;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #666669;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+        """)
+        
         scroll_widget = QWidget()
+        scroll_widget.setStyleSheet("background-color: #232325;")
         self.model_layout = QVBoxLayout()
+        self.model_layout.setContentsMargins(8, 8, 8, 8)
+        self.model_layout.setSpacing(6)
         scroll_widget.setLayout(self.model_layout)
         scroll_area.setWidget(scroll_widget)
         scroll_area.setWidgetResizable(True)
@@ -687,7 +760,7 @@ class RVCStandaloneMainWindow(QMainWindow):
         
         self.setPalette(palette)
         
-        # スタイルシート
+        # スタイルシート（Ultra Think改善版）
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #232325;
@@ -731,6 +804,15 @@ class RVCStandaloneMainWindow(QMainWindow):
                 margin-bottom: -2px;
                 border-radius: 9px;
             }
+            /* Ultra Think: モデル選択UI専用スタイル */
+            QGroupBox[title="音声モデル"] {
+                font-size: 14px;
+                font-weight: bold;
+                color: #ffffff;
+            }
+            QLabel {
+                background-color: transparent;
+            }
         """)
     
     def load_models(self):
@@ -770,18 +852,18 @@ class RVCStandaloneMainWindow(QMainWindow):
         self.log_message(f"✅ {len(self.models)}個のモデルを読み込みました")
     
     def select_model(self, model_info):
-        """モデル選択"""
+        """モデル選択（Ultra Think改善版）"""
         self.current_model = model_info
         self.log_message(f"📋 モデル選択: {model_info['name']}")
         
-        # 選択状態のビジュアル更新
+        # 選択状態のビジュアル更新（Ultra Think改善版）
         for i in range(self.model_layout.count()):
             widget = self.model_layout.itemAt(i).widget()
-            if widget:
-                if hasattr(widget, 'model_info') and widget.model_info == model_info:
-                    widget.setStyleSheet("QFrame { border: 2px solid #2a82da; }")
+            if widget and isinstance(widget, ModelCard):
+                if widget.model_info == model_info:
+                    widget.apply_selected_style()
                 else:
-                    widget.setStyleSheet("QFrame { border: 1px solid gray; }")
+                    widget.apply_default_style()
     
     def select_input_file(self):
         """入力ファイル選択"""
