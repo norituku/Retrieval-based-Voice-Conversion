@@ -423,68 +423,109 @@ class ModelCard(QFrame):
         self.apply_default_style()
         
     def setup_ui(self):
-        """UIセットアップ（Ultra Think改善版）"""
+        """UIセットアップ（Ultra Think最適化版 - 美的レイアウト）"""
         self.setFrameStyle(QFrame.StyledPanel)
-        self.setFixedHeight(130)
+        self.setFixedHeight(80)  # 小さくコンパクトに
         self.setCursor(Qt.PointingHandCursor)
         
-        layout = QVBoxLayout()
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(4)
+        # メインレイアウト（コンパクト版）
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(12, 8, 12, 8)
+        main_layout.setSpacing(4)
         
-        # モデル名（改善版）
+        # ヘッダー部分（モデル名とインデックス）
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
+        
+        # モデル名（左側 - コンパクト）
         name_label = QLabel(self.model_info.get('name', 'Unknown Model'))
-        name_label.setFont(QFont("Arial", 12, QFont.Bold))
-        name_label.setStyleSheet("color: #ffffff; margin-bottom: 2px;")
-        layout.addWidget(name_label)
+        name_label.setFont(QFont("Arial", 11, QFont.Bold))
+        name_label.setStyleSheet("color: #FFFFFF;")
+        name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        header_layout.addWidget(name_label, 1)
         
-        # ファイルパス（改善版）
-        path_text = self.model_info.get('path', 'N/A')
-        if len(path_text) > 50:
-            path_text = "..." + path_text[-47:]
-        path_label = QLabel(f"Path: {path_text}")
-        path_label.setFont(QFont("Arial", 8))
-        path_label.setStyleSheet("color: #cccccc;")
-        path_label.setWordWrap(True)
-        layout.addWidget(path_label)
-        
-        # インデックス情報（改善版）
+        # インデックス情報（右側 - バッジスタイル）
         has_index = self.model_info.get('has_index', False)
-        index_label = QLabel(f"Index: {'あり' if has_index else 'なし'}")
-        index_label.setFont(QFont("Arial", 9, QFont.Bold))
-        index_color = "#4CAF50" if has_index else "#FF9800"
-        index_label.setStyleSheet(f"color: {index_color}; margin-top: 2px;")
-        layout.addWidget(index_label)
+        index_widget = QLabel('INDEX' if has_index else 'NO IDX')
+        index_widget.setFont(QFont("SF Pro Display", 9, QFont.Bold))
         
-        self.setLayout(layout)
+        if has_index:
+            index_style = """
+                color: #4CAF50;
+                background-color: rgba(76, 175, 80, 0.15);
+                border: 1px solid rgba(76, 175, 80, 0.3);
+                padding: 5px 12px;
+                border-radius: 12px;
+                font-weight: bold;
+            """
+        else:
+            index_style = """
+                color: #FF7043;
+                background-color: rgba(255, 112, 67, 0.15);
+                border: 1px solid rgba(255, 112, 67, 0.3);
+                padding: 5px 12px;
+                border-radius: 12px;
+                font-weight: bold;
+            """
+        
+        index_widget.setStyleSheet(index_style)
+        index_widget.setAlignment(Qt.AlignCenter)
+        index_widget.setMaximumWidth(80)
+        header_layout.addWidget(index_widget, 0)
+        
+        main_layout.addWidget(header_widget)
+        
+        # 区切り線は削除してスペースを節約
+        
+        # パス情報（シンプル版）
+        import os.path
+        full_path = self.model_info.get('path', 'N/A')
+        file_name = os.path.basename(full_path)
+        
+        path_label = QLabel(f"📁 {file_name}")
+        path_label.setFont(QFont("Arial", 9))
+        path_label.setStyleSheet("color: #999999; padding: 2px 0px;")
+        path_label.setToolTip(full_path)  # フルパスはツールチップで表示
+        main_layout.addWidget(path_label)
+        
+        # ストレッチを削除してコンパクトに
+        
+        self.setLayout(main_layout)
     
     def apply_default_style(self):
-        """デフォルトスタイル適用（Ultra Think）"""
+        """デフォルトスタイル適用（Ultra Think最適化版）"""
         self.setStyleSheet("""
             ModelCard {
-                background-color: #2d2d30;
-                border: 1px solid #404042;
-                border-radius: 6px;
-                margin: 2px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #2E2E32, stop:1 #252529);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                margin: 3px;
             }
             ModelCard:hover {
-                background-color: #3d3d40;
-                border: 1px solid #555558;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #353539, stop:1 #2C2C30);
+                border: 1px solid rgba(255, 255, 255, 0.18);
             }
         """)
         self.is_selected = False
     
     def apply_selected_style(self):
-        """選択状態スタイル適用（Ultra Think）"""
+        """選択状態スタイル適用（Ultra Think最適化版）"""
         self.setStyleSheet("""
             ModelCard {
-                background-color: #1e3a5f;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1E4A6F, stop:1 #1A3F5C);
                 border: 2px solid #2A82DA;
-                border-radius: 6px;
-                margin: 2px;
+                border-radius: 10px;
+                margin: 3px;
             }
             ModelCard:hover {
-                background-color: #264a6f;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #25537A, stop:1 #1F4A68);
+                border: 2px solid #3A92EA;
             }
         """)
         self.is_selected = True
@@ -553,8 +594,25 @@ class RVCStandaloneMainWindow(QMainWindow):
         model_dir_group = self.create_model_directory_group()
         layout.addWidget(model_dir_group)
         
-        # 更新ボタン
-        refresh_btn = QPushButton("モデル更新")
+        # 更新ボタン（洗練されたデザイン）
+        refresh_btn = QPushButton("🔄 モデルを再読み込み")
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(76, 175, 80, 0.2);
+                color: #4CAF50;
+                border: 1px solid #4CAF50;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(76, 175, 80, 0.3);
+            }
+            QPushButton:pressed {
+                background-color: rgba(76, 175, 80, 0.15);
+            }
+        """)
         refresh_btn.clicked.connect(self.load_models)
         layout.addWidget(refresh_btn)
         
@@ -602,28 +660,121 @@ class RVCStandaloneMainWindow(QMainWindow):
         return panel
     
     def create_model_directory_group(self):
-        """モデルディレクトリ選択グループ"""
-        group = QGroupBox("モデルディレクトリ")
-        layout = QGridLayout()
+        """モデルディレクトリ選択グループ（Ultra Think洗練版）"""
+        group = QGroupBox("モデルディレクトリ設定")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 12px;
+                color: #FFFFFF;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
         
-        # 現在のディレクトリ表示
-        layout.addWidget(QLabel("現在のディレクトリ:"), 0, 0)
-        self.model_dir_label = QLabel(str(self.model_dir))
-        self.model_dir_label.setStyleSheet("border: 1px solid gray; padding: 5px; background-color: #2a2a2a;")
-        self.model_dir_label.setWordWrap(True)
-        layout.addWidget(self.model_dir_label, 0, 1)
+        # メインレイアウト
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(12, 16, 12, 12)
+        main_layout.setSpacing(8)
         
-        # ディレクトリ選択ボタン
-        select_dir_btn = QPushButton("ディレクトリを選択")
+        # パス表示セクション
+        path_widget = QWidget()
+        path_layout = QHBoxLayout(path_widget)
+        path_layout.setContentsMargins(0, 0, 0, 0)
+        path_layout.setSpacing(8)
+        
+        # フォルダーアイコン
+        folder_icon = QLabel("📂")
+        folder_icon.setFont(QFont("Arial", 14))
+        folder_icon.setStyleSheet("color: #FFA726;")
+        path_layout.addWidget(folder_icon, 0)
+        
+        # パス表示（整理版）
+        import os.path
+        display_path = str(self.model_dir)
+        if len(display_path) > 50:
+            parts = display_path.split(os.sep)
+            if len(parts) > 3:
+                display_path = f"{parts[0]}{os.sep}...{os.sep}{os.sep.join(parts[-2:])}"
+        
+        self.model_dir_label = QLabel(display_path)
+        self.model_dir_label.setFont(QFont("Consolas", 10))
+        self.model_dir_label.setStyleSheet("""
+            QLabel {
+                color: #E0E0E0;
+                background-color: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 6px;
+                padding: 8px 12px;
+            }
+        """)
+        self.model_dir_label.setWordWrap(False)
+        self.model_dir_label.setToolTip(str(self.model_dir))
+        path_layout.addWidget(self.model_dir_label, 1)
+        
+        main_layout.addWidget(path_widget)
+        
+        # ボタンセクション
+        button_widget = QWidget()
+        button_layout = QHBoxLayout(button_widget)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(8)
+        
+        # 選択ボタン
+        select_dir_btn = QPushButton("📁 ディレクトリ選択")
+        select_dir_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1E88E5;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #1565C0;
+            }
+        """)
         select_dir_btn.clicked.connect(self.select_model_directory)
-        layout.addWidget(select_dir_btn, 0, 2)
+        button_layout.addWidget(select_dir_btn)
         
-        # デフォルトに戻すボタン
-        reset_dir_btn = QPushButton("デフォルトに戻す")
+        # リセットボタン
+        reset_dir_btn = QPushButton("↻ デフォルト")
+        reset_dir_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 255, 255, 0.1);
+                color: #BBBBBB;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.15);
+                color: #FFFFFF;
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.08);
+            }
+        """)
         reset_dir_btn.clicked.connect(self.reset_model_directory)
-        layout.addWidget(reset_dir_btn, 1, 2)
+        button_layout.addWidget(reset_dir_btn)
         
-        group.setLayout(layout)
+        button_layout.addStretch()
+        main_layout.addWidget(button_widget)
+        
+        group.setLayout(main_layout)
         return group
         
     def create_conversion_panel(self):
@@ -1068,8 +1219,18 @@ class RVCStandaloneMainWindow(QMainWindow):
         print("⚠️ アプリケーションアイコンが見つかりません。デフォルトアイコンを使用します。")
 
 def main():
-    """メイン関数"""
+    """メイン関数（macOS対応強化版）"""
+    import os
+    
+    # macOSでのQt表示問題の対策
+    os.environ['QT_MAC_WANTS_LAYER'] = '1'
+    os.environ['QT_AUTO_SCREEN_SCALE_FACTOR'] = '1'
+    
     app = QApplication(sys.argv)
+    
+    # macOS特有の設定
+    app.setAttribute(Qt.AA_DontShowIconsInMenus, False)
+    app.setAttribute(Qt.AA_NativeWindows, True)
     
     # アプリケーション情報
     app.setApplicationName("RVC Voice Converter - 完全独立版")
@@ -1078,7 +1239,13 @@ def main():
     
     # メインウィンドウ作成
     window = RVCStandaloneMainWindow()
+    
+    # ウィンドウ表示設定の強化
+    window.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
+    window.setAttribute(Qt.WA_ShowWithoutActivating, False)
     window.show()
+    window.raise_()
+    window.activateWindow()
     
     # システム情報ログ
     window.log_message("🚀 RVC Voice Converter - 完全独立版 (Ultra Think) 起動")
@@ -1087,6 +1254,8 @@ def main():
     window.log_message(f"🔧 RVC直接統合: {'利用可能' if RVC_DIRECT_AVAILABLE else 'CLI経由'}")
     window.log_message(f"🎵 対応フォーマット: WAV, MP3, FLAC" + (", M4A, AIFF, MP4" if PYDUB_AVAILABLE else " (基本形式のみ)"))
     window.log_message("🔥 Poetry環境不要 - 完全独立動作")
+    
+    print("✅ ウィンドウ表示完了 - Dockを確認してください")
     
     # アプリケーション実行
     sys.exit(app.exec_())
