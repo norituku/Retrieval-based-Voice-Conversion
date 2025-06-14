@@ -76,6 +76,7 @@ def create_standalone_app_bundle():
         # Ultra Think: RVCライブラリ完全バンドル
         "--add-data", "rvc:rvc",        # RVCライブラリ全体を含める
         "--add-data", "app_icons:app_icons",  # アイコンディレクトリを含める
+        "--add-data", "model_dir:model_dir",  # モデルディレクトリを含める（必須モデルファイル用）
         
         # PyQt5依存関係
         "--hidden-import", "PyQt5.sip",
@@ -109,9 +110,38 @@ def create_standalone_app_bundle():
         "--hidden-import", "faiss",
         "--hidden-import", "faiss-cpu",
         
-        # 機械学習ライブラリ
+        # 機械学習ライブラリ（Ultra Think強化版）
         "--hidden-import", "fairseq",
+        "--hidden-import", "fairseq.checkpoint_utils",
+        "--hidden-import", "fairseq.models",
+        "--hidden-import", "fairseq.modules",
         "--hidden-import", "transformers",
+        
+        # PyTorch関連
+        "--hidden-import", "torch.utils",
+        "--hidden-import", "torch.utils.data",
+        "--hidden-import", "torch.nn",
+        "--hidden-import", "torch.nn.functional",
+        
+        # 追加の音声処理
+        "--hidden-import", "parselmouth",
+        "--hidden-import", "pyworld",
+        "--hidden-import", "torchcrepe",
+        
+        # 数値計算
+        "--hidden-import", "scipy",
+        "--hidden-import", "scipy.signal",
+        "--hidden-import", "scipy.io",
+        "--hidden-import", "sklearn",
+        
+        # その他必要なライブラリ
+        "--hidden-import", "tensorboardX",
+        "--hidden-import", "cv2",
+        
+        # Ultra Think: 実行時パス修正オプション
+        "--collect-all", "fairseq",     # fairseq完全収集
+        "--collect-all", "torch",       # PyTorch完全収集
+        "--collect-all", "librosa",     # librosa完全収集
         
         # 追加オプション
         "--clean",                      # キャッシュクリア
@@ -153,6 +183,68 @@ def create_standalone_app_bundle():
             print(f"   2. {app_name}.appをダブルクリック")
             print("   3. またはApplicationsフォルダにドラッグ&ドロップ")
             print("   4. 他のMacに.appファイルをコピーするだけで動作")
+            
+            # Ultra Think: Info.plistを修正して自動再開を防止
+            info_plist_path = app_bundle_path / "Contents" / "Info.plist"
+            if info_plist_path.exists():
+                print("🔧 Info.plist修正中（自動再開防止）...")
+                try:
+                    # Info.plistを読み込み
+                    import plistlib
+                    with open(info_plist_path, 'rb') as f:
+                        plist_data = plistlib.load(f)
+                    
+                    # 自動再開防止の設定を追加
+                    plist_data['NSSupportsAutomaticTermination'] = False
+                    plist_data['NSSupportsSuddenTermination'] = False
+                    plist_data['NSApplicationAutomaticTerminationSupportEnabled'] = False
+                    plist_data['NSQuitAlwaysKeepsWindows'] = False
+                    plist_data['CFBundleVersion'] = '1.0.0'
+                    plist_data['LSMinimumSystemVersion'] = '10.15'
+                    
+                    # Info.plistを書き戻し
+                    with open(info_plist_path, 'wb') as f:
+                        plistlib.dump(plist_data, f)
+                    
+                    print("✅ Info.plist修正完了 - 自動再開防止設定追加")
+                    
+                except Exception as e:
+                    print(f"⚠️ Info.plist修正エラー: {e}")
+            
+            # Ultra Think: 拡張ファイル属性除去（権限エラー解決）
+            print("🧹 Ultra Think: 拡張ファイル属性除去中（権限エラー解決）...")
+            try:
+                # アプリケーションバンドル全体の拡張属性を除去
+                result = subprocess.run(
+                    ["xattr", "-cr", str(app_bundle_path)],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if result.returncode == 0:
+                    print("✅ Ultra Think: 拡張属性除去完了 - デスクトップアクセス権限問題解決")
+                else:
+                    print(f"⚠️ 拡張属性除去警告: {result.stderr}")
+                    # フォールバック: 個別に属性を除去
+                    subprocess.run(["xattr", "-d", "com.apple.provenance", str(app_bundle_path)], capture_output=True)
+                    subprocess.run(["xattr", "-d", "com.apple.quarantine", str(app_bundle_path)], capture_output=True)
+                    print("✅ Ultra Think: 主要な拡張属性を個別除去完了")
+                
+                # 拡張属性除去の確認
+                check_result = subprocess.run(
+                    ["xattr", str(app_bundle_path)],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if check_result.stdout.strip() == "":
+                    print("✅ Ultra Think: 拡張属性完全除去確認 - 権限エラー根本解決")
+                else:
+                    print(f"📋 残存拡張属性: {check_result.stdout.strip()}")
+                    
+            except Exception as e:
+                print(f"⚠️ 拡張属性除去エラー: {e}")
+                print("💡 手動除去コマンド: xattr -cr 'RVC Voice Converter Standalone.app'")
             
             return True
         else:
