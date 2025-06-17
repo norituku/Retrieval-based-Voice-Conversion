@@ -1865,61 +1865,20 @@ class DarkModeGUI:
                     ]
                     self.log_message(f"Using hardcoded Python path: {POETRY_PYTHON_PATH}")
                 else:
-                    # Poetry環境のPythonパスを取得
-                    poetry_env_result = subprocess.run(
-                        ["poetry", "env", "info", "--path"],
-                        capture_output=True,
-                        text=True,
-                        cwd=project_dir,
-                        env=env  # 修正された環境変数を使用
-                    )
-                    
-                    if poetry_env_result.returncode == 0:
-                        poetry_env_path = poetry_env_result.stdout.strip()
-                        python_path = os.path.join(poetry_env_path, "bin", "python")
-                        if os.path.exists(python_path):
-                            # 仮想環境のPythonを直接使用
-                            cmd_array = [
-                                python_path, "-m", "rvc.wrapper.cli.cli", "infer",
-                                "-m", self.model_info["file"],
-                                "-i", self.input_var.get(),
-                                "-o", self.output_file_path,
-                                "-fu", str(self.pitch_var.get()),
-                                "-fm", self.f0_method_var.get(),
-                                "-ir", str(self.index_rate_var.get()),
-                                "-fr", str(self.filter_radius_var.get()),
-                                "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get())
-                            ]
-                            self.log_message(f"Using Python from: {python_path}")
-                        else:
-                            # フォールバック: poetry runを使用
-                            cmd_array = [
-                                "poetry", "run", "rvc", "infer",
-                                "-m", self.model_info["file"],
-                                "-i", self.input_var.get(),
-                                "-o", self.output_file_path,
-                                "-fu", str(self.pitch_var.get()),
-                                "-fm", self.f0_method_var.get(),
-                                "-ir", str(self.index_rate_var.get()),
-                                "-fr", str(self.filter_radius_var.get()),
-                                "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get())
-                            ]
-                    else:
-                        # poetry runを使用
-                        cmd_array = [
-                            "poetry", "run", "rvc", "infer",
-                            "-m", self.model_info["file"],
-                            "-i", self.input_var.get(),
-                            "-o", self.output_file_path,
-                            "-fu", str(self.pitch_var.get()),
-                            "-fm", self.f0_method_var.get(),
-                            "-ir", str(self.index_rate_var.get()),
-                            "-fr", str(self.filter_radius_var.get()),
-                            "-p", str(self.protect_var.get()),
-                            "-rmr", str(self.rms_mix_rate_var.get())
-                        ]
+                    # poetry runを使用してRVCを実行（依存関係が正しくインストールされている）
+                    cmd_array = [
+                        "poetry", "run", "rvc", "infer",
+                        "-m", self.model_info["file"],
+                        "-i", self.input_var.get(),
+                        "-o", self.output_file_path,
+                        "-fu", str(self.pitch_var.get()),
+                        "-fm", self.f0_method_var.get(),
+                        "-ir", str(self.index_rate_var.get()),
+                        "-fr", str(self.filter_radius_var.get()),
+                        "-p", str(self.protect_var.get()),
+                        "-rmr", str(self.rms_mix_rate_var.get())
+                    ]
+                    self.log_message("Using poetry run for RVC execution")
                 
                 if index_file and os.path.exists(index_file):
                     cmd_array.extend(["-if", index_file])
