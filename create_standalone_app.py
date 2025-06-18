@@ -61,13 +61,20 @@ if venv_path.exists():
 a = Analysis(
     ['{project_dir / "gui_dark_mode.py"}'],
     pathex=[str(project_dir)],
-    binaries=[],
-    datas=added_files,
+    binaries=[
+        ('/opt/homebrew/lib/libtcl8.6.dylib', '.'),
+        ('/opt/homebrew/lib/libtk8.6.dylib', '.'),
+    ],
+    datas=added_files + [
+        ('/opt/homebrew/lib/tcl8.6', 'tcl8.6'),
+        ('/opt/homebrew/lib/tk8.6', 'tk8.6'),
+    ],
     hiddenimports=[
         'tkinter',
-        'tkinter.ttk',
+        'tkinter.ttk', 
         'tkinter.filedialog',
         'tkinter.messagebox',
+        '_tkinter',
         'rvc',
         'rvc.wrapper.cli.cli',
         'torch',
