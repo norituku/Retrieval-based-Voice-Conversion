@@ -1,3 +1,36 @@
+# Retrieval-based Voice Conversion ― CLAUDE 設定
+
+## 📚 知見管理システム
+
+このプロジェクトでは以下のファイルで知見を体系的に管理しています：
+
+### `.claude/context.md`
+- プロジェクトの背景、目的、制約条件
+- 技術スタック選定理由
+- ビジネス要件や技術的制約
+
+### `.claude/project-knowledge.md`
+- 実装パターンや設計決定の知見
+- アーキテクチャの選択理由（ADR）
+- 避けるべきパターンやアンチパターン
+
+### `.claude/project-improvements.md`
+- 過去の試行錯誤の記録
+- 失敗した実装とその原因
+- 改善プロセスと結果
+
+### `.claude/debug-log.md`
+- 重要なトラブルシューティング記録
+- エラー解決プロセス
+- 緊急時復旧手順
+
+### `.claude/common-patterns.md`
+- 頻繁に使用するコマンドパターン
+- 定型的な実装テンプレート
+- 緊急時診断チェックリスト
+
+**重要**: 新しい実装や重要な決定を行った際は、該当するファイルを更新してください。
+
 ## 🔨 最重要ルール - 新しいルールの追加プロセス
 
 ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
@@ -8,12 +41,51 @@
 
 このプロセスにより、プロジェクトのルールを継続的に改善していきます。
 
+## 🎯 RVC音声変換環境構築の重要知見
+
+### 環境構築の必須要件
+1. **Python バージョン**: 必ずPython 3.11を使用（3.12以降はfairseqで問題発生）
+2. **PyTorch バージョン**: 2.1.x系のみ使用（`torch = "~2.1.0"`）
+   - 2.6以降はweights_only=Trueがデフォルトとなりfairseqで問題発生
+3. **fairseq**: PyPI版ではなくGit版を使用
+   ```toml
+   fairseq = {git = "https://github.com/Tps-F/fairseq.git", branch="main"}
+   ```
+
+### GUI実行環境の設定
+1. **Poetry環境**: `poetry env use python3.11`で3.11環境を強制
+2. **rvc_config.py**: Poetry環境のPythonパスを正確に設定
+3. **Hubertモデルパス**: `--hubert_model_path`パラメータが必須
+4. **インデックスファイル**: 破損したfaissインデックスは自動スキップ
+
+### トラブルシューティング履歴
+- **問題**: PyTorch 2.6のweights_only問題でHubertモデル読み込み失敗
+- **解決**: PyTorch 2.1.xダウングレード
+- **問題**: faissインデックスファイル(\x93NUM形式)読み込みエラー  
+- **解決**: NumPy形式ファイル検出時の自動スキップ機能追加
+- **問題**: GUI起動しない（Tkinter環境問題）
+- **解決**: Poetry環境でのTkinter動作確認とバックグラウンド実行
+
+### 実行コマンド
+```bash
+# 環境構築
+poetry env use python3.11
+poetry install
+
+# GUI実行
+poetry run python gui_dark_mode.py
+```
+
+**⚠️ 重要**: この環境設定は音声変換の成功に必須です。バージョンを変更する場合は事前にテストが必要です。
+
+## 📋 開発ルール
+
 1. パッケージ管理
-   - `uv` のみを使用し、`pip` は絶対に使わない
-   - インストール方法：`uv add package`
-   - ツールの実行：`uv run tool`
-   - アップグレード：`uv add --dev package --upgrade-package package`
-   - 禁止事項：`uv pip install`、`@latest` 構文の使用
+   - **RVCプロジェクト**: `poetry` のみを使用（依存関係の複雑さのため）
+   - **その他プロジェクト**: `uv` を使用し、`pip` は絶対に使わない
+   - インストール方法：`poetry install` / `poetry add package`
+   - ツールの実行：`poetry run tool`
+   - 環境管理：`poetry env use python3.11`
 
 2. コード品質
    - すべてのコードに型ヒントを必須とする
@@ -23,16 +95,16 @@
    - 行の最大長は88文字まで
 
 3. テスト要件
-   - テストフレームワーク：`uv run --frozen pytest`
+   - テストフレームワーク：`poetry run pytest`
    - 非同期テストは `asyncio` ではなく `anyio` を使用
    - カバレッジはエッジケースやエラーも含めてテストすること
    - 新機能には必ずテストを追加すること
    - バグ修正にはユニットテストを追加すること
 
 1. Ruff
-   - フォーマット実行：`uv run --frozen ruff format .`
-   - チェック実行：`uv run --frozen ruff check .`
-   - 修正実行：`uv run --frozen ruff check . --fix`
+   - フォーマット実行：`poetry run ruff format .`
+   - チェック実行：`poetry run ruff check .`
+   - 修正実行：`poetry run ruff check . --fix`
    - 重要な指摘内容：
      - 行の長さ（88文字）
      - インポートのソート（I001）
@@ -43,7 +115,7 @@
      - インポート文は複数行に分ける
 
 2. 型チェック
-   - ツール：`uv run --frozen pyright`
+   - ツール：`poetry run pyright`
    - 要件：
      - Optional型には明示的なNoneチェックを入れる
      - 文字列の型は狭めて扱う
