@@ -39,7 +39,7 @@ class AudioPreprocess:
             else CascadedNet(
                 self.mp.param["bins"] * 2, 64 if "DeReverb" in model_path else 48
             )
-            .load_state_dict(torch.load(model_path, map_location="cpu"))
+            .load_state_dict(torch.load(model_path, map_location="cpu", weights_only=False))
             .eval()
         )
         if self.config.is_half:

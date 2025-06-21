@@ -1861,7 +1861,8 @@ class DarkModeGUI:
                         "-ir", str(self.index_rate_var.get()),
                         "-fr", str(self.filter_radius_var.get()),
                         "-p", str(self.protect_var.get()),
-                        "-rmr", str(self.rms_mix_rate_var.get())
+                        "-rmr", str(self.rms_mix_rate_var.get()),
+                        "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
                     ]
                     self.log_message(f"Using hardcoded Python path: {POETRY_PYTHON_PATH}")
                 else:
@@ -1889,7 +1890,8 @@ class DarkModeGUI:
                                 "-ir", str(self.index_rate_var.get()),
                                 "-fr", str(self.filter_radius_var.get()),
                                 "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get())
+                                "-rmr", str(self.rms_mix_rate_var.get()),
+                                "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
                             ]
                             self.log_message(f"Using Python from: {python_path}")
                         else:
@@ -1904,7 +1906,8 @@ class DarkModeGUI:
                                 "-ir", str(self.index_rate_var.get()),
                                 "-fr", str(self.filter_radius_var.get()),
                                 "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get())
+                                "-rmr", str(self.rms_mix_rate_var.get()),
+                                "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
                             ]
                     else:
                         # poetry runを使用
@@ -1918,14 +1921,23 @@ class DarkModeGUI:
                             "-ir", str(self.index_rate_var.get()),
                             "-fr", str(self.filter_radius_var.get()),
                             "-p", str(self.protect_var.get()),
-                            "-rmr", str(self.rms_mix_rate_var.get())
+                            "-rmr", str(self.rms_mix_rate_var.get()),
+                            "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
                         ]
                 
+                # インデックスファイルが破損している場合はスキップ
                 if index_file and os.path.exists(index_file):
-                    cmd_array.extend(["-if", index_file])
-                
-                if os.path.exists(hubert_path):
-                    cmd_array.extend(["--hubert_model_path", hubert_path])
+                    try:
+                        # ファイルの先頭バイトをチェックしてfaissフォーマットか確認
+                        with open(index_file, 'rb') as f:
+                            header = f.read(8)
+                        # faissファイルでない場合はスキップ
+                        if header.startswith(b'\x93NUM'):
+                            self.log_message(f"Skipping invalid index file: {index_file}")
+                        else:
+                            cmd_array.extend(["-if", index_file])
+                    except Exception as e:
+                        self.log_message(f"Index file error, skipping: {e}")
                 
                 env = os.environ.copy()
                 env['PYTHONPATH'] = project_dir
