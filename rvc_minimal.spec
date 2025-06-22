@@ -78,4 +78,10 @@ app = BUNDLE(
     icon='app_icons/rvc_icon.icns',
     bundle_identifier='com.rvc.voiceconverter',
     version='1.0.0',
+    info_plist={
+        'LSEnvironment': {
+            'PATH': '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+        },
+        'NSHighResolutionCapable': True,
+    },
 )
