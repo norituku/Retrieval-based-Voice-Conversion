@@ -216,3 +216,4 @@ test_*_*.py
 # 開発中の最適化試験版
 rvc_pyqt_app_optimized.py
 rvc_pyqt_optimized.py
+x86_64_env/
