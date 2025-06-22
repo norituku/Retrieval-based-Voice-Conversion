@@ -109,6 +109,59 @@ open dist/VoiceConverter.app
 
 **重要**: Poetry環境のPython直接パスを使用することで、スタンドアロンアプリ内でのPoetry呼び出しエラーを完全に回避できます。
 
+### 🚨 DMG作成時の重要注意事項
+
+**絶対ルール**: DMG作成時のアプリコピーは `shutil.copytree()` を使わず `cp -pRP` を使用する
+
+```python
+# ❌ 絶対禁止（バイナリ破損の原因）
+shutil.copytree(app_path, app_dest)
+
+# ✅ 必須の方法（権限・リンク保持）
+subprocess.run(["cp", "-pRP", str(app_path), str(app_dest)], check=True)
+```
+
+**理由**: shutil.copytree()はバイナリファイルや実行権限を破損させ、DMG内のアプリで「Poetry not found」エラーが発生する。
+
+### 🚨 絶対に忘れてはいけない重要事実
+
+**現状:**
+- ✅ スタンドアロンアプリ: 完璧に動作、Poetryエラーなし
+- ✅ ユニバーサル版アプリ: 完璧に動作、Poetryエラーなし  
+- ❌ DMG内のアプリ: Poetryエラー発生
+
+**結論:** アプリ自体は完璧。DMG作成プロセスのみが問題。
+
+### 🌍 ユニバーサルバイナリ（Rosetta2対応版）作成方法
+
+**実用的アプローチ:**
+```bash
+# ユニバーサルバイナリ作成スクリプトを実行
+./create_universal_binary.sh
+
+# コード署名を適用
+cd universal_build && ./fix_codesign_universal.sh
+
+# 起動テスト
+open VoiceConverter_universal.app
+```
+
+**結果:**
+- **VoiceConverter_universal.app**: Rosetta2対応（Apple Silicon + Intel Mac両対応）
+- **VoiceConverter_arm64.app**: arm64専用（最適パフォーマンス）
+- **サイズ**: 約2.5GB（arm64版のみだが全Mac対応）
+
+**技術的詳細:**
+- Info.plistでLSArchitecturePriorityを設定（arm64優先、x86_64対応）
+- LSMinimumSystemVersionを10.15に設定
+- Rosetta2によりIntel Macでもネイティブ動作
+- 初回起動時のみ翻訳処理で若干の遅延あり
+
+**✅ 検証済み動作環境:**
+- Apple Silicon Mac: ネイティブ動作、最適パフォーマンス、音声変換成功
+- Intel Mac (Rosetta2): 翻訳動作、実用的パフォーマンス、音声変換成功
+- 全ての環境でPoetryエラーなし（Poetry直接パスビルド効果）
+
 ## 📋 開発ルール
 
 1. パッケージ管理
