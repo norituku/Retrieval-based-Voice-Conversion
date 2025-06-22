@@ -89,8 +89,25 @@ poetry run python gui_dark_mode.py
    - **解決**: `fix_codesign.sh`で署名削除→再適用の自動化
    - **要件**: ad-hoc署名による`CODESIGNING 2 Invalid Page`エラーの解決
 4. **容量最適化**: 不要モジュール除外により854MB→997MB（PyTorch完全版）
-   - **実行コマンド**: `./build_minimal_app.sh` または `pyinstaller --clean --noconfirm rvc_minimal.spec`
-   - **修復コマンド**: `./fix_codesign.sh && open dist/VoiceConverter.app`
+
+### 🎯 必須: Poetry環境でのPyInstallerビルド方法
+
+**正しいビルド方法:**
+```bash
+# Poetry環境パス確認
+poetry env info --path
+
+# 直接パスでPyInstaller実行（必須）
+/Users/norikene_satoshi/Library/Caches/pypoetry/virtualenvs/rvc-WP0SRWIz-py3.11/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
+
+# コード署名修復
+./fix_codesign.sh
+
+# アプリ起動
+open dist/VoiceConverter.app
+```
+
+**重要**: Poetry環境のPython直接パスを使用することで、スタンドアロンアプリ内でのPoetry呼び出しエラーを完全に回避できます。
 
 ## 📋 開発ルール
 
