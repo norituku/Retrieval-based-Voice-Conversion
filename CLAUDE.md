@@ -78,6 +78,37 @@ poetry run python gui_dark_mode.py
 
 **⚠️ 重要**: この環境設定は音声変換の成功に必須です。バージョンを変更する場合は事前にテストが必要です。
 
+## 🚀 スタンドアロンアプリ配布の重要知見
+
+### PyInstaller 6.x による配布可能アプリ作成
+1. **アーキテクチャ対応**: arm64専用ビルドで997MBの完全動作アプリを実現
+2. **PyTorchライブラリ問題**: `libtorch_global_deps.dylib`の収集漏れがメイン原因
+   - **解決**: specファイルでtorch/lib全体を明示的に追加
+   - **回避**: runtime_hookでのtorchインポートを削除（循環参照防止）
+3. **コード署名問題**: PyInstallerのstrip処理後に署名が破損
+   - **解決**: `fix_codesign.sh`で署名削除→再適用の自動化
+   - **要件**: ad-hoc署名による`CODESIGNING 2 Invalid Page`エラーの解決
+4. **容量最適化**: 不要モジュール除外により854MB→997MB（PyTorch完全版）
+
+### 🎯 必須: Poetry環境でのPyInstallerビルド方法
+
+**正しいビルド方法:**
+```bash
+# Poetry環境パス確認
+poetry env info --path
+
+# 直接パスでPyInstaller実行（必須）
+/Users/norikene_satoshi/Library/Caches/pypoetry/virtualenvs/rvc-WP0SRWIz-py3.11/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
+
+# コード署名修復
+./fix_codesign.sh
+
+# アプリ起動
+open dist/VoiceConverter.app
+```
+
+**重要**: Poetry環境のPython直接パスを使用することで、スタンドアロンアプリ内でのPoetry呼び出しエラーを完全に回避できます。
+
 ## 📋 開発ルール
 
 1. パッケージ管理
@@ -129,6 +160,22 @@ poetry run python gui_dark_mode.py
      - PyPIのバージョンを確認する
      - 設定ファイルのリビジョンを更新する
      - まず設定ファイルをコミットする
+
+## 🔧 PyInstaller スタンドアロンアプリ配布のトラブルシューティング
+
+### 頻出エラーと解決方法
+- **問題**: `CODESIGNING 2 Invalid Page` でアプリ起動時にクラッシュ
+- **解決**: `codesign --remove-signature` → `codesign --force --deep --sign -` の順で再署名
+- **問題**: `Failed to load dynlib/dll libtorch_global_deps.dylib`
+- **解決**: specファイルに `(torch/lib, 'torch/lib')` を datas に明示的追加
+- **問題**: Poetry環境でuniversal2ビルドが `not a fat binary` エラー
+- **解決**: `target_arch=None` で現在アーキテクチャビルド後、必要に応じてlipo結合
+- **検証方法**: `./dist/App.app/Contents/MacOS/App` で直接実行してエラー確認
+
+### 成功パターン
+- **ファイル構成**: `rvc_minimal.spec` + `hooks/` + `fix_codesign.sh`
+- **ビルド手順**: Poetry環境Python直接パス実行 → `./fix_codesign.sh`
+- **最終成果**: 997MB の完全動作arm64アプリ（Python環境不要）
 
 ## 🚀 Ultra Think技術 - 問題解決ベストプラクティス
 
