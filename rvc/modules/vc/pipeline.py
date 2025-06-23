@@ -5,34 +5,25 @@ import traceback
 from functools import lru_cache
 from time import time as ttime
 from pathlib import Path
+from typing import Any, Union
 
 import faiss
 import librosa
 import numpy as np
+import torch
 try:
     import parselmouth
     PARSELMOUTH_AVAILABLE = True
 except ImportError:
     print("Warning: parselmouth not available - pm F0 method will be disabled")
     PARSELMOUTH_AVAILABLE = False
-    # Create dummy parselmouth for compatibility
-    class DummyParselmouthSound:
-        def to_pitch_ac(self, *args, **kwargs):
-            raise ImportError("parselmouth not available")
-        @property
-        def selected_array(self):
-            return {"frequency": np.array([])}
-    class DummyParselmouth:
-        @staticmethod
-        def Sound(*args, **kwargs):
-            return DummyParselmouthSound()
-    parselmouth = DummyParselmouth()
 
 import pyworld
-import torch
 import torch.nn.functional as F
 import torchcrepe
 from scipy import signal
+
+from rvc.modules.vc.utils import get_index_path_from_model, load_hubert
 
 logger: logging.Logger = logging.getLogger(__name__)
 

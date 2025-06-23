@@ -2,6 +2,7 @@
 import os
 import sys
 from pathlib import Path
+import platform
 
 # プロジェクトルート
 project_root = Path.cwd()
@@ -13,27 +14,97 @@ main_script = "gui_dark_mode.py"
 datas = [
     ('rvc', 'rvc'),
     ('model_dir', 'model_dir'),
+    ('rvc_worker.py', '.'),
+    ('test_rvc_direct.py', '.'),
 ]
 
-# 隠しインポート
+# PyTorchライブラリを含める
+import torch
+torch_path = Path(torch.__file__).parent
+torch_lib = torch_path / 'lib'
+if torch_lib.exists():
+    datas.append((str(torch_lib), 'torch/lib'))
+
+# torch._Cバイナリを明示的に含める（シンボリックリンク問題対策）
+try:
+    import torch._C
+    if hasattr(torch._C, '__file__') and torch._C.__file__:
+        torch_c_path = torch._C.__file__
+        datas.append((torch_c_path, 'torch'))
+        print(f"[spec] torch._C binary explicitly added: {torch_c_path}")
+except Exception as e:
+    print(f"[spec] Warning: Could not add torch._C: {e}")
+
+# 隠しインポート  
 hiddenimports = [
     'rvc',
-    'torch', 'torchaudio', 'numpy', 'librosa', 'scipy',
+    'rvc.configs.config', 'rvc.modules.vc.modules',
+    # torchモジュール全体の完全収集
+    'torch', 'torch._C', 'torch._C._fft', 'torch._C._linalg', 'torch._C._nn',
+    'torch.distributed', 'torch.distributed.distributed_c10d', 'torch.distributed.rpc',
+    'torch.backends', 'torch.backends.cuda', 'torch.backends.cudnn',
+    'torch.testing', 'torch.package', 'torch.package.importer',
+    'torch.nn', 'torch.nn.functional', 'torch.nn.modules',
+    'torch.optim', 'torch.autograd', 'torch.utils', 'torch.utils.data',
+    'torch.jit', 'torch.fx', 'torch.overrides',
+    'torchaudio', 'numpy', 'librosa', 'scipy',
     'sklearn', 'faiss', 'pyworld', 'parselmouth', 'crepe',
     'resampy', 'ffmpeg-python', 'soundfile',
+    # fairseq関連モジュール（音声変換に必要）
+    'fairseq', 'fairseq.checkpoint_utils', 'fairseq.dataclass',
+    'fairseq.dataclass.configs', 'fairseq.distributed',
+    'fairseq.models', 'fairseq.modules', 'fairseq.tasks',
     'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox',
-    'threading', 'queue', 'subprocess', 'json', 'logging'
+    'threading', 'queue', 'subprocess', 'json', 'logging',
+    'unittest', 'unittest.mock',  # Python標準ライブラリ（PyTorchのtorch._guards依存）
+    '_cffi_backend', 'cffi',
+    # soundfile依存関係
+    '_soundfile', '_soundfile_data',
+    # その他の欠落している可能性のあるモジュール
+    'click', 'click.testing', 'dotenv',
+    # parselmouth関連（F0推定に必須）
+    'praat_parselmouth', 'parselmouth._parselmouth',
 ]
 
-# 除外モジュール
-excludes = ['test', 'tests', 'testing', 'unittest', 'pdb']
+# 除外モジュール（torchは除外しない）
+excludes = ['test', 'tests', 'testing', 'pdb']
 
 block_cipher = None
+
+# libsndfileライブラリを探して含める
+binaries = []
+
+# parselmouthのC拡張を収集
+try:
+    import praat_parselmouth
+    parselmouth_path = Path(praat_parselmouth.__file__).parent
+    # parselmouthの.soファイルを収集
+    for so_file in parselmouth_path.glob('*.so'):
+        binaries.append((str(so_file), 'praat_parselmouth'))
+    for dylib_file in parselmouth_path.glob('*.dylib'):
+        binaries.append((str(dylib_file), 'praat_parselmouth'))
+except ImportError:
+    print("[spec] Warning: praat_parselmouth not found for binary collection")
+
+# macOSでlibsndfileを探す
+if platform.system() == 'Darwin':
+    import subprocess
+    try:
+        # Homebrewからlibsndfileのパスを取得
+        result = subprocess.run(['brew', '--prefix', 'libsndfile'], 
+                               capture_output=True, text=True)
+        if result.returncode == 0:
+            libsndfile_prefix = result.stdout.strip()
+            libsndfile_path = f"{libsndfile_prefix}/lib/libsndfile.dylib"
+            if os.path.exists(libsndfile_path):
+                binaries.append((libsndfile_path, '.'))
+    except:
+        pass
 
 a = Analysis(
     [main_script],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=['hooks'],
@@ -42,11 +113,30 @@ a = Analysis(
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=False,
+    noarchive=True,  # アーカイブ圧縮を無効化（zlib破損エラー対策）
+    # torchモジュールを確実に収集（pyzは使わずpyのみ）
+    module_collection_mode={
+        'torch': 'py',  # pyファイルとして収集（pyzアーカイブは使わない）
+        'torch.*': 'py',  # すべてのtorchサブモジュールも同様
+        'librosa': 'py',  # librosaも非圧縮で収集
+        'librosa.*': 'py',  # librosaサブモジュールも同様
+        'soundfile': 'py',  # soundfileも非圧縮
+        'scipy': 'py',  # scipyも非圧縮（大きなモジュール）
+        'scipy.*': 'py',
+        'numpy': 'py',  # numpyも非圧縮
+        'numpy.*': 'py',
+    },
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+# PYZ圧縮を完全に無効化
+pyz = PYZ(
+    a.pure, 
+    a.zipped_data, 
+    cipher=block_cipher,
+    compress_level=0  # 圧縮レベル0 = 無圧縮
+)
 
+# UPX圧縮を無効化（Apple Siliconと互換性問題あり）
 exe = EXE(
     pyz,
     a.scripts,
@@ -59,7 +149,7 @@ exe = EXE(
     upx=False,
     console=False,
     target_arch='arm64',
-    codesign_identity=None,
+    codesign_identity='-',
 )
 
 coll = COLLECT(

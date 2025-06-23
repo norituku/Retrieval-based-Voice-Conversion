@@ -26,13 +26,41 @@ echo -e "\n${YELLOW}Step 2: 拡張属性を削除${NC}"
 find "$APP_PATH" -type f -exec xattr -c {} \; 2>/dev/null || true
 echo -e "${GREEN}✓ 拡張属性を削除${NC}"
 
-# 3. ad-hoc署名を再適用（深層署名）
-echo -e "\n${YELLOW}Step 3: ad-hoc署名を適用${NC}"
+# 3. 個別ライブラリファイルに署名
+echo -e "\n${YELLOW}Step 3: 全ライブラリファイルに個別署名${NC}"
+# .soファイルに個別署名
+find "$APP_PATH" -name "*.so" -exec codesign --force --sign - {} \; 2>/dev/null || true
+# .dylibファイルに個別署名
+find "$APP_PATH" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
+# Python拡張モジュール(.cpython-311-darwin.so)に個別署名
+find "$APP_PATH" -name "*.cpython-*-darwin.so" -exec codesign --force --sign - {} \; 2>/dev/null || true
+
+# torch/libディレクトリ内のライブラリに個別署名（重要）
+echo -e "${YELLOW}Step 3.1: torchライブラリディレクトリに個別署名${NC}"
+if [ -d "$APP_PATH/Contents/Resources/torch/lib" ]; then
+    find "$APP_PATH/Contents/Resources/torch/lib" -type f \( -name "*.dylib" -o -name "*.so" \) \
+        -exec codesign --force --sign - {} \; 2>/dev/null || true
+    echo -e "${GREEN}✓ torchライブラリ署名完了${NC}"
+else
+    echo -e "${YELLOW}⚠️  torch/libディレクトリが見つかりません${NC}"
+fi
+
+# torchディレクトリ全体のバイナリファイルに署名
+if [ -d "$APP_PATH/Contents/Resources/torch" ]; then
+    find "$APP_PATH/Contents/Resources/torch" -type f \( -name "*.dylib" -o -name "*.so" \) \
+        -exec codesign --force --sign - {} \; 2>/dev/null || true
+    echo -e "${GREEN}✓ torch全体署名完了${NC}"
+fi
+
+echo -e "${GREEN}✓ 個別ライブラリ署名完了${NC}"
+
+# 4. ad-hoc署名を再適用（深層署名）
+echo -e "\n${YELLOW}Step 4: ad-hoc署名を適用${NC}"
 codesign --force --deep --sign - "$APP_PATH"
 echo -e "${GREEN}✓ ad-hoc署名完了${NC}"
 
-# 4. 署名の検証
-echo -e "\n${YELLOW}Step 4: 署名を検証${NC}"
+# 5. 署名の検証
+echo -e "\n${YELLOW}Step 5: 署名を検証${NC}"
 if codesign --verify --deep --verbose "$APP_PATH"; then
     echo -e "${GREEN}✓ 署名検証成功！${NC}"
 else
@@ -40,8 +68,8 @@ else
     exit 1
 fi
 
-# 5. Gatekeeperをバイパス（初回起動用）
-echo -e "\n${YELLOW}Step 5: Gatekeeper属性を設定${NC}"
+# 6. Gatekeeperをバイパス（初回起動用）
+echo -e "\n${YELLOW}Step 6: Gatekeeper属性を設定${NC}"
 spctl --add "$APP_PATH" 2>/dev/null || true
 echo -e "${GREEN}✓ Gatekeeper設定完了${NC}"
 

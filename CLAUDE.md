@@ -387,3 +387,120 @@ excludedimports = [
 
 ### 次のステップ
 現在のtorch.distributedエラー解決により、完全な環境非依存スタンドアロンアプリが完成予定
+
+### 環境非依存性の維持
+- subprocess方式は完全に廃止済み
+- 直接インポート方式を堅持
+- Poetry/システムPython依存なし
+
+## 🚨 PyInstaller torch._C ロード問題（2025年6月23日）
+
+### 問題の概要
+PyInstallerでビルドしたアプリで torch._C モジュールがロードできない問題。
+
+**エラー:**
+```
+NameError: name '_C' is not defined
+場所: torch/__init__.py:465
+```
+
+### 根本原因
+1. **モジュール名競合**: torch/random.py vs Python標準random
+2. **C++拡張の特殊性**: 通常のPythonモジュールとは異なる初期化
+3. **PyInstallerの制約**: C++拡張の自動収集の限界
+
+### 解決済み対策
+```python
+# runtime_hook.pyで標準ライブラリを事前確保
+import random as stdlib_random
+import tempfile as stdlib_tempfile
+sys.modules['random'] = stdlib_random
+sys.modules['tempfile'] = stdlib_tempfile
+```
+
+### 検証中の対策
+1. **GUI内での遅延初期化**
+   - runtime_hookでのtorch初期化を避ける
+   - _run_rvc_direct()内でのみtorchをインポート
+   
+2. **最小限torch使用**
+   - 必要最小限の機能のみ使用
+   - 代替ライブラリの検討
+
+### 重要な学び
+- **PyInstallerとC++拡張は相性が悪い**
+- **初期化タイミングが重要**
+- **環境非依存性を最優先に維持**
+
+## 🎯 zlibエラーの解決方法（2025年6月23日）
+
+### 問題
+```
+zlib.error: Error -5 while decompressing data: incomplete or truncated stream
+```
+
+### 根本原因
+PyInstallerのPYZアーカイブ圧縮が大きなモジュール（librosa等）で失敗
+
+### 解決策
+1. **PYZ圧縮を完全無効化**
+```python
+pyz = PYZ(
+    a.pure, 
+    a.zipped_data, 
+    cipher=block_cipher,
+    compress_level=0  # 圧縮レベル0 = 無圧縮
+)
+```
+
+2. **大きなモジュールを非圧縮で収集**
+```python
+module_collection_mode={
+    'librosa': 'py',
+    'librosa.*': 'py',
+    'scipy': 'py',
+    'scipy.*': 'py',
+}
+```
+
+3. **キャッシュ完全クリア**
+```bash
+rm -rf ~/Library/Application\ Support/pyinstaller
+rm -rf build dist
+```
+
+### 重要ポイント
+- 大きなライブラリは圧縮しない
+- キャッシュクリアは必須
+- runtime_hookは最小限に
+
+## 🚨 致命的問題: ダミー実装による音声品質劣化（2025年6月24日）
+
+### 問題の発見
+スタンドアロンアプリで音声変換は成功するが、声質が著しく劣化する問題が発生。
+
+### 根本原因
+PyInstallerビルド時のエラー回避のため、以下の重要モジュールをダミー実装で代替していた：
+
+1. **DummyHubertModel** (`rvc/modules/vc/utils.py`)
+   - 本来のHubert特徴抽出（768次元）を線形層1枚で擬似生成
+   - 音声の本質的な特徴が失われる
+
+2. **DummyParselmouth** (`rvc/modules/vc/pipeline.py`, `enhanced_pipeline.py`)
+   - F0（基本周波数）推定を行わず固定値を返す
+   - ピッチ情報が完全に失われる
+
+### 違反したルール
+- **「RVCのアルゴリズムを改変しない」** - 最重要ルール違反
+- **「環境非依存でも品質を維持」** - 機能は動くが品質が劣化
+
+### 解決方針
+1. **ダミー実装の完全削除**
+2. **本物のモジュールの確実なバンドル**
+3. **エラー時は停止（ダミー代替禁止）**
+
+### 新ルール追加
+**🚫 ダミー実装禁止ルール**
+- エラー回避のためのダミー実装は絶対に行わない
+- 必須モジュールが欠落した場合は明確なエラーメッセージで停止
+- 品質劣化を伴う代替実装は採用しない

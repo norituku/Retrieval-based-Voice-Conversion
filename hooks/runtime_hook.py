@@ -1,4 +1,4 @@
-# PyInstaller ランタイムフック - メモリとパフォーマンスの最適化
+# PyInstaller ランタイムフック - 最小限の環境設定
 
 import os
 import sys
@@ -17,33 +17,78 @@ os.environ['PYTORCH_CUDA_ALLOC_CONF'] = ''       # CUDA割り当て設定を無�
 os.environ['PYTHONWARNINGS'] = 'ignore'
 
 # PyInstaller環境でのモジュールパス設定
-if getattr(sys, 'frozen', False):
-    # PyInstallerでパッケージ化されている場合
-    if hasattr(sys, '_MEIPASS'):
-        # --onefile モード
-        bundle_dir = sys._MEIPASS
-    else:
-        # --onedir モード
-        bundle_dir = os.path.dirname(os.path.abspath(sys.executable))
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    print("[Runtime Hook] PyInstaller環境検出")
+    
+    # --onefile モード
+    bundle_dir = sys._MEIPASS
+    
+    # torch/random.pyとPython標準ライブラリの競合を回避
+    # 重要: torchをインポートする前に、標準ライブラリのrandomとtempfileをインポート
+    import random as stdlib_random
+    import tempfile as stdlib_tempfile
+    sys.modules['random'] = stdlib_random
+    sys.modules['tempfile'] = stdlib_tempfile
+    print("[Runtime Hook] 標準ライブラリ競合回避設定完了")
     
     # macOSアプリケーションバンドルの場合
     if sys.platform == "darwin":
-        # アプリケーションバンドル内のResourcesディレクトリを探す
+        # アプリケーションバンドルのルートを探す
         app_dir = bundle_dir
         while app_dir and not app_dir.endswith('.app'):
             app_dir = os.path.dirname(app_dir)
         
         if app_dir and app_dir.endswith('.app'):
-            resource_dir = os.path.join(app_dir, 'Contents', 'Resources')
-            if os.path.exists(resource_dir):
-                # sys.pathに追加
-                if resource_dir not in sys.path:
-                    sys.path.insert(0, resource_dir)
-                
-                # PYTHONPATHにも追加
-                pythonpath = os.environ.get('PYTHONPATH', '')
-                if resource_dir not in pythonpath:
-                    os.environ['PYTHONPATH'] = f"{resource_dir}:{pythonpath}" if pythonpath else resource_dir
+            # .app/Contents/ 以下のディレクトリ構造
+            frameworks_dir = os.path.join(app_dir, 'Contents', 'Frameworks')
+            
+            # torchとその依存ライブラリのパスを設定
+            torch_paths = [
+                os.path.join(frameworks_dir, 'torch', 'lib'),
+                frameworks_dir,
+            ]
+            
+            # 既存のパスを保持
+            existing_path = os.environ.get('DYLD_LIBRARY_PATH', '')
+            new_paths = []
+            
+            # 存在するパスのみ追加
+            for path in torch_paths:
+                if os.path.exists(path):
+                    new_paths.append(path)
+            
+            # パスを設定
+            if new_paths:
+                new_path_str = ':'.join(new_paths)
+                if existing_path:
+                    os.environ['DYLD_LIBRARY_PATH'] = f"{new_path_str}:{existing_path}"
+                else:
+                    os.environ['DYLD_LIBRARY_PATH'] = new_path_str
+                print(f"[Runtime Hook] DYLD_LIBRARY_PATH設定: {os.environ['DYLD_LIBRARY_PATH']}")
 
-# PyTorchの起動時の最適化はメインスクリプトで行う
-# ここでtorchをインポートすると循環参照になる可能性がある 
+print("[Runtime Hook] 環境設定完了")
+
+# fairseq dataclass互換性パッチ（PyInstaller環境対応）
+try:
+    # fairseq.dataclass.configsモジュールをインポート前に事前パッチ
+    import fairseq
+    import fairseq.dataclass
+    
+    # help変数の事前定義（グローバルスコープに注入）
+    if 'help' not in globals():
+        globals()['help'] = "help"
+        print("[Runtime Hook] fairseq help変数グローバル注入完了")
+    
+    # さらにfairseq.dataclass.configsモジュールレベルでも注入
+    import fairseq.dataclass.configs
+    if not hasattr(fairseq.dataclass.configs, 'help'):
+        fairseq.dataclass.configs.help = "help"
+        print("[Runtime Hook] fairseq.dataclass.configs.help注入完了")
+        
+except ImportError:
+    print("[Runtime Hook] fairseq未インストール - パッチスキップ")
+except Exception as e:
+    print(f"[Runtime Hook] fairseqパッチエラー: {e}")
+
+# 注意: torch関連の初期化は実行時に行う（遅延初期化）
+# これによりモジュール競合や循環インポートを回避 

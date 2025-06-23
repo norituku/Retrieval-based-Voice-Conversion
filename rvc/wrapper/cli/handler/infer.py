@@ -6,6 +6,49 @@ import os
 import sys
 import soundfile as sf
 
+# PyInstaller環境でのモジュールパス設定
+if getattr(sys, 'frozen', False):
+    print(f"[DEBUG] PyInstaller環境検出: sys.frozen = {sys.frozen}")
+    print(f"[DEBUG] sys.executable = {sys.executable}")
+    
+    # PyInstallerでパッケージ化されている場合
+    if hasattr(sys, '_MEIPASS'):
+        # --onefile モード
+        bundle_dir = sys._MEIPASS
+    else:
+        # --onedir モード
+        bundle_dir = os.path.dirname(os.path.abspath(sys.executable))
+        bundle_dir = os.path.join(bundle_dir, '_internal')
+    
+    print(f"[DEBUG] bundle_dir = {bundle_dir}")
+    
+    # rvcモジュールへのパスを追加
+    rvc_path = os.path.join(bundle_dir, 'rvc')
+    if os.path.exists(rvc_path) and rvc_path not in sys.path:
+        sys.path.insert(0, bundle_dir)
+        print(f"[DEBUG] Added to sys.path: {bundle_dir}")
+    
+    # PyInstallerのリソースディレクトリも確認
+    resource_dir = os.path.join(bundle_dir, 'Contents', 'Resources')
+    if os.path.exists(resource_dir) and resource_dir not in sys.path:
+        sys.path.insert(0, resource_dir)
+        print(f"[DEBUG] Added to sys.path: {resource_dir}")
+    
+    # macOSアプリケーションバンドルの場合の追加チェック
+    if sys.platform == "darwin":
+        # アプリケーションバンドル内のResourcesディレクトリを探す
+        app_dir = bundle_dir
+        while app_dir and not app_dir.endswith('.app'):
+            app_dir = os.path.dirname(app_dir)
+        
+        if app_dir and app_dir.endswith('.app'):
+            resource_dir = os.path.join(app_dir, 'Contents', 'Resources')
+            if os.path.exists(resource_dir) and resource_dir not in sys.path:
+                sys.path.insert(0, resource_dir)
+                print(f"[DEBUG] Added macOS app Resources to sys.path: {resource_dir}")
+    
+    print(f"[DEBUG] Final sys.path (first 5): {sys.path[:5]}")
+
 try:
     import click
     # print("[DEBUG] click imported successfully")
@@ -36,10 +79,25 @@ try:
     # print("[DEBUG] rvc.modules.vc.modules imported successfully")
 except ModuleNotFoundError as e:
     print(f"[DEBUG] FAILED to import rvc.modules.vc.modules: {e}")
-    # exit()
+    import sys
+    import traceback
+    print(f"[DEBUG] sys.path: {sys.path}")
+    print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+    sys.exit(1)  # エラーが発生したら即座に終了
 except ImportError as e:
     print(f"[DEBUG] FAILED to import rvc.modules.vc.modules (ImportError): {e}")
-    # exit()
+    import sys
+    import traceback
+    print(f"[DEBUG] sys.path: {sys.path}")
+    print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+    sys.exit(1)  # エラーが発生したら即座に終了
+except Exception as e:
+    print(f"[DEBUG] UNEXPECTED ERROR during import: {e}")
+    import sys
+    import traceback
+    print(f"[DEBUG] sys.path: {sys.path}")
+    print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+    sys.exit(1)
 
 # numba_logger = logging.getLogger("numba")
 # numba_logger.setLevel(logging.WARNING)

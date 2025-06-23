@@ -9,27 +9,12 @@ from pathlib import Path
 import faiss
 import librosa
 import numpy as np
-try:
-    import parselmouth
-    PARSELMOUTH_AVAILABLE = True
-except ImportError:
-    print("Warning: parselmouth not available - pm F0 method will be disabled")
-    PARSELMOUTH_AVAILABLE = False
-    # Create dummy parselmouth for compatibility
-    class DummyParselmouthSound:
-        def to_pitch_ac(self, *args, **kwargs):
-            raise ImportError("parselmouth not available")
-        @property
-        def selected_array(self):
-            return {"frequency": np.array([])}
-    class DummyParselmouth:
-        @staticmethod
-        def Sound(*args, **kwargs):
-            return DummyParselmouthSound()
-    parselmouth = DummyParselmouth()
-
-import pyworld
 import torch
+from functools import lru_cache
+from typing import Any, Union
+
+import parselmouth
+import pyworld
 import torch.nn.functional as F
 import torchcrepe
 from scipy import signal

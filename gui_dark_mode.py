@@ -1937,6 +1937,107 @@ class DarkModeGUI:
 
     def _run_rvc_direct(self, index_file, project_dir):
         """PyInstaller環境でRVCを直接実行（subprocessを使わない）"""
+        # 必要なモジュールを関数の最初で確実にインポート
+        import os
+        import sys
+        
+        # PyTorchも関数の最初でインポート（スコープ競合回避）
+        try:
+            # まずtorchを明示的にインポートして初期化
+            self.log_message("PyTorchを初期化中...")
+            
+            # PyInstaller環境での特別な処理
+            if hasattr(sys, '_MEIPASS'):
+                # ライブラリパスを設定
+                bundle_dir = sys._MEIPASS
+                if sys.platform == "darwin":
+                    # macOSの場合、アプリバンドル構造を考慮
+                    app_dir = bundle_dir
+                    while app_dir and not app_dir.endswith('.app'):
+                        app_dir = os.path.dirname(app_dir)
+                    
+                    if app_dir and app_dir.endswith('.app'):
+                        frameworks_dir = os.path.join(app_dir, 'Contents', 'Frameworks')
+                        
+                        # torch._Cのロードに必要なパスを確認
+                        torch_lib_paths = [
+                            os.path.join(frameworks_dir, 'torch', 'lib'),
+                            frameworks_dir
+                        ]
+                        
+                        # ライブラリの事前ロード
+                        try:
+                            import ctypes
+                            # 重要なライブラリを順番にロード
+                            for lib_dir in torch_lib_paths:
+                                if os.path.exists(lib_dir):
+                                    # libtorch_python.dylibを最初にロード
+                                    libtorch_python_path = os.path.join(lib_dir, 'libtorch_python.dylib')
+                                    if os.path.exists(libtorch_python_path):
+                                        ctypes.CDLL(libtorch_python_path, mode=ctypes.RTLD_GLOBAL)
+                                        self.log_message(f"libtorch_python.dylib loaded from {lib_dir}")
+                                        
+                                    # libtorch.dylibもロード
+                                    libtorch_path = os.path.join(lib_dir, 'libtorch.dylib')
+                                    if os.path.exists(libtorch_path):
+                                        ctypes.CDLL(libtorch_path, mode=ctypes.RTLD_GLOBAL)
+                                        self.log_message(f"libtorch.dylib loaded from {lib_dir}")
+                                    break
+                        except Exception as e:
+                            self.log_message(f"ライブラリ事前ロードエラー: {e}")
+            
+            import torch
+            self.log_message(f"PyTorch version: {torch.__version__}")
+            self.log_message(f"PyTorch _C module: {hasattr(torch, '_C')}")
+            
+            # PyInstaller環境でのtorch._C詳細診断
+            if hasattr(sys, '_MEIPASS'):
+                self.log_message("PyInstaller環境検出 - torch._C詳細診断開始")
+                
+                # torch._Cモジュールの詳細確認
+                if hasattr(torch, '_C'):
+                    c_module = torch._C
+                    self.log_message(f"torch._C モジュール: {c_module}")
+                    self.log_message(f"torch._C.__file__: {getattr(c_module, '__file__', 'N/A')}")
+                    
+                    # 重要な属性の存在確認
+                    important_attrs = ['_nn', '_fft', '_linalg', '_distributed_c10d', '_distributed_rpc']
+                    for attr in important_attrs:
+                        has_attr = hasattr(c_module, attr)
+                        self.log_message(f"torch._C.{attr}: {has_attr}")
+                        if not has_attr:
+                            self.log_message(f"⚠️  torch._C.{attr} が見つかりません")
+                    
+                    # torch.backends の確認
+                    try:
+                        import torch.backends
+                        self.log_message(f"torch.backends: {torch.backends is not None}")
+                        if hasattr(torch.backends, 'cuda'):
+                            self.log_message(f"torch.backends.cuda: {torch.backends.cuda is not None}")
+                        if hasattr(torch.backends, 'mps'):
+                            self.log_message(f"torch.backends.mps: {torch.backends.mps is not None}")
+                    except Exception as e:
+                        self.log_message(f"torch.backends エラー: {e}")
+                        # backends が利用できない場合、代替として直接nn初期化を試行
+                        try:
+                            import torch.nn
+                            self.log_message("torch.nn 直接インポート成功")
+                        except Exception as nn_e:
+                            self.log_message(f"torch.nn 直接インポートも失敗: {nn_e}")
+                            raise RuntimeError(f"PyTorchのコアモジュールが初期化できません: {e}")
+                else:
+                    self.log_message("❌ torch._C モジュールが見つかりません")
+                    # _Cモジュールが見つからない場合、致命的エラー
+                    raise RuntimeError("torch._Cモジュールが初期化されていません。PyInstallerビルドに問題がある可能性があります。")
+            else:
+                self.log_message("開発環境 - torch._C診断スキップ")
+            
+        except Exception as e:
+            self.log_message(f"❌ PyTorch初期化エラー: {e}")
+            import traceback
+            self.log_message(f"スタックトレース: {traceback.format_exc()}")
+            raise
+        
         try:
             self.log_message("=== _run_rvc_direct関数内部に入りました ===")
             self.log_message(f"index_file: {index_file}")
@@ -2013,12 +2114,6 @@ class DarkModeGUI:
             self.log_message("直接インポート方式でRVC実行を開始...")
             
             try:
-                # まずtorchを明示的にインポートして初期化
-                self.log_message("PyTorchを初期化中...")
-                import torch
-                self.log_message(f"PyTorch version: {torch.__version__}")
-                self.log_message(f"PyTorch _C module: {hasattr(torch, '_C')}")
-                
                 # MPS（Apple Silicon）設定
                 if torch.backends.mps.is_available():
                     self.log_message("MPS (Apple Silicon) が利用可能です")
@@ -2026,6 +2121,32 @@ class DarkModeGUI:
                 else:
                     self.log_message("CPU モードで実行します")
                     device = torch.device("cpu")
+                
+                # fairseq help変数パッチ（PyInstaller環境での互換性確保）
+                self.log_message("fairseq互換性パッチ適用中...")
+                try:
+                    # Step 1: help変数をグローバルスコープに注入
+                    import builtins
+                    if not hasattr(builtins, 'help'):
+                        builtins.help = "help"
+                        self.log_message("✅ builtins.helpパッチ適用完了")
+                    
+                    # Step 2: fairseq.dataclass.configsモジュールのグローバル空間に注入
+                    import fairseq.dataclass.configs as configs_module
+                    if not hasattr(configs_module, 'help'):
+                        configs_module.help = "help"
+                        self.log_message("✅ fairseq.dataclass.configs.helpパッチ適用完了")
+                    
+                    # Step 3: 動的パッチ適用（最も確実）
+                    import sys
+                    if 'fairseq.dataclass.configs' in sys.modules:
+                        sys.modules['fairseq.dataclass.configs'].help = "help"
+                        self.log_message("✅ fairseq sys.modulesパッチ適用完了")
+                        
+                except Exception as e:
+                    self.log_message(f"⚠️ fairseq helpパッチ適用エラー: {e}")
+                    import traceback
+                    self.log_message(f"詳細: {traceback.format_exc()}")
                 
                 # RVCモジュールをインポート
                 self.log_message("RVCモジュールをインポート中...")
