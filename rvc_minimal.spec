@@ -35,7 +35,7 @@ try:
 except Exception as e:
     print(f"[spec] Warning: Could not add torch._C: {e}")
 
-# 隠しインポート  
+# 隠しインポート
 hiddenimports = [
     'rvc',
     'rvc.configs.config', 'rvc.modules.vc.modules',
@@ -64,10 +64,12 @@ hiddenimports = [
     'click', 'click.testing', 'dotenv',
     # parselmouth関連（F0推定に必須）
     'praat_parselmouth', 'parselmouth._parselmouth',
+    # pdb関連（fairseqが必要とする）
+    'pdb', 'bdb', 'cmd',
 ]
 
 # 除外モジュール（torchは除外しない）
-excludes = ['test', 'tests', 'testing', 'pdb']
+excludes = ['test', 'tests', 'testing']  # pdbは除外しない（fairseqが必要とするため）
 
 block_cipher = None
 
@@ -91,7 +93,7 @@ if platform.system() == 'Darwin':
     import subprocess
     try:
         # Homebrewからlibsndfileのパスを取得
-        result = subprocess.run(['brew', '--prefix', 'libsndfile'], 
+        result = subprocess.run(['brew', '--prefix', 'libsndfile'],
                                capture_output=True, text=True)
         if result.returncode == 0:
             libsndfile_prefix = result.stdout.strip()
@@ -130,8 +132,8 @@ a = Analysis(
 
 # PYZ圧縮を完全に無効化
 pyz = PYZ(
-    a.pure, 
-    a.zipped_data, 
+    a.pure,
+    a.zipped_data,
     cipher=block_cipher,
     compress_level=0  # 圧縮レベル0 = 無圧縮
 )
