@@ -85,3 +85,6 @@ app = BUNDLE(
         'NSHighResolutionCapable': True,
     },
 )
+# === PyInstaller自体のPython環境を最大活用 ===
+# PyInstaller環境が既に完全なPython 3.11環境を含むため、
+# 追加の埋め込みPythonは不要。sys.executableで実行時解決。

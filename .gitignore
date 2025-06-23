@@ -30,7 +30,7 @@ MANIFEST
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-# *.spec  # Commented out to allow rvc_minimal.spec
+*.spec
 
 # Installer logs
 pip-log.txt
@@ -162,8 +162,7 @@ cython_debug/
 # macOS
 .DS_Store
 
-# Claude Code settings
-.claude/
+
 
 # Project specific
 model_dir/
@@ -216,4 +215,5 @@ test_*_*.py
 # 開発中の最適化試験版
 rvc_pyqt_app_optimized.py
 rvc_pyqt_optimized.py
+python_embed/
 x86_64_env/

@@ -5,6 +5,7 @@ RVC Dark Mode GUI - 改善版（レイアウト最適化）
 """
 import os
 import sys
+import tempfile
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
@@ -18,10 +19,11 @@ import time
 
 # RVC設定をインポート（存在する場合）
 try:
-    from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE
+    from rvc_config import POETRY_PYTHON_PATH, RVC_MODULE, get_poetry_python, get_rvc_command
     USE_HARDCODED_PATH = True
 except ImportError:
     USE_HARDCODED_PATH = False
+    RVC_MODULE = "rvc.wrapper.cli.cli"
 
 class DarkModeGUI:
     def __init__(self, root):
@@ -1779,20 +1781,14 @@ class DarkModeGUI:
     def run_conversion(self):
         """実際の変換処理（内蔵プログレスバー使用）"""
         try:
+            self.log_message("=== run_conversion関数開始 ===")
             # 1. 初期化
             self.update_progress(0, 0, "プロジェクトとモデルの初期化中...")
+            self.log_message("ステップ1: 初期化開始")
             
-            # プロジェクトディレクトリを確認
+            # プロジェクトディレクトリ（スタンドアロン用）
             project_dir = self.base_dir
-            if project_dir.endswith('/Resources'):
-                possible_dirs = [
-                    "/Users/norikene_satoshi/Retrieval-based-Voice-Conversion",
-                    os.path.expanduser("~/Retrieval-based-Voice-Conversion"),
-                ]
-                for dir_path in possible_dirs:
-                    if os.path.exists(os.path.join(dir_path, "pyproject.toml")):
-                        project_dir = dir_path
-                        break
+            self.log_message(f"スタンドアロンアプリベースディレクトリ: {project_dir}")
             
             time.sleep(0.5)  # 視覚的フィードバックのため
             self.update_progress(0, 100, "初期化完了")
@@ -1814,6 +1810,7 @@ class DarkModeGUI:
             
             # 3. 前処理
             self.update_progress(2, 0, "音声データの前処理を開始...")
+            self.log_message("=== ステップ3: 前処理開始 ===")
             
             hubert_path = os.path.join(self.model_dir, "hubert_base.pt")
             if not os.path.exists(hubert_path):
@@ -1821,158 +1818,33 @@ class DarkModeGUI:
                 if os.path.exists(alt_hubert):
                     hubert_path = alt_hubert
             
-            poetry_available = subprocess.run(
-                ["which", "poetry"],
-                capture_output=True,
-                text=True
-            ).returncode == 0
-            
-            if poetry_available:
-                # Poetryのパスを確認
-                poetry_path = subprocess.run(
-                    ["which", "poetry"],
-                    capture_output=True,
-                    text=True
-                ).stdout.strip()
-                self.log_message(f"Using Poetry at: {poetry_path}")
-                
-                # Poetry環境情報を取得
-                try:
-                    env_info = subprocess.run(
-                        ["poetry", "env", "info", "--path"],
-                        capture_output=True,
-                        text=True,
-                        cwd=project_dir
-                    )
-                    if env_info.returncode == 0:
-                        self.log_message(f"Poetry env: {env_info.stdout.strip()}")
-                except:
-                    pass
-                
-                # ハードコーディングされたパスを使用（利用可能な場合）
-                if USE_HARDCODED_PATH and os.path.exists(POETRY_PYTHON_PATH):
-                    cmd_array = [
-                        POETRY_PYTHON_PATH, "-m", RVC_MODULE, "infer",
-                        "-m", self.model_info["file"],
-                        "-i", self.input_var.get(),
-                        "-o", self.output_file_path,
-                        "-fu", str(self.pitch_var.get()),
-                        "-fm", self.f0_method_var.get(),
-                        "-ir", str(self.index_rate_var.get()),
-                        "-fr", str(self.filter_radius_var.get()),
-                        "-p", str(self.protect_var.get()),
-                        "-rmr", str(self.rms_mix_rate_var.get()),
-                        "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
-                    ]
-                    self.log_message(f"Using hardcoded Python path: {POETRY_PYTHON_PATH}")
-                else:
-                    # Poetry環境のPythonパスを取得
-                    poetry_env_result = subprocess.run(
-                        ["poetry", "env", "info", "--path"],
-                        capture_output=True,
-                        text=True,
-                        cwd=project_dir,
-                        env=env  # 修正された環境変数を使用
-                    )
-                    
-                    if poetry_env_result.returncode == 0:
-                        poetry_env_path = poetry_env_result.stdout.strip()
-                        python_path = os.path.join(poetry_env_path, "bin", "python")
-                        if os.path.exists(python_path):
-                            # 仮想環境のPythonを直接使用
-                            cmd_array = [
-                                python_path, "-m", "rvc.wrapper.cli.cli", "infer",
-                                "-m", self.model_info["file"],
-                                "-i", self.input_var.get(),
-                                "-o", self.output_file_path,
-                                "-fu", str(self.pitch_var.get()),
-                                "-fm", self.f0_method_var.get(),
-                                "-ir", str(self.index_rate_var.get()),
-                                "-fr", str(self.filter_radius_var.get()),
-                                "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get()),
-                                "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
-                            ]
-                            self.log_message(f"Using Python from: {python_path}")
-                        else:
-                            # フォールバック: poetry runを使用
-                            cmd_array = [
-                                "poetry", "run", "rvc", "infer",
-                                "-m", self.model_info["file"],
-                                "-i", self.input_var.get(),
-                                "-o", self.output_file_path,
-                                "-fu", str(self.pitch_var.get()),
-                                "-fm", self.f0_method_var.get(),
-                                "-ir", str(self.index_rate_var.get()),
-                                "-fr", str(self.filter_radius_var.get()),
-                                "-p", str(self.protect_var.get()),
-                                "-rmr", str(self.rms_mix_rate_var.get()),
-                                "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
-                            ]
-                    else:
-                        # poetry runを使用
-                        cmd_array = [
-                            "poetry", "run", "rvc", "infer",
-                            "-m", self.model_info["file"],
-                            "-i", self.input_var.get(),
-                            "-o", self.output_file_path,
-                            "-fu", str(self.pitch_var.get()),
-                            "-fm", self.f0_method_var.get(),
-                            "-ir", str(self.index_rate_var.get()),
-                            "-fr", str(self.filter_radius_var.get()),
-                            "-p", str(self.protect_var.get()),
-                            "-rmr", str(self.rms_mix_rate_var.get()),
-                            "--hubert_model_path", os.path.join(project_dir, "model_dir", "hubert_base.pt")
-                        ]
-                
-                # インデックスファイルが破損している場合はスキップ
-                if index_file and os.path.exists(index_file):
-                    try:
-                        # ファイルの先頭バイトをチェックしてfaissフォーマットか確認
-                        with open(index_file, 'rb') as f:
-                            header = f.read(8)
-                        # faissファイルでない場合はスキップ
-                        if header.startswith(b'\x93NUM'):
-                            self.log_message(f"Skipping invalid index file: {index_file}")
-                        else:
-                            cmd_array.extend(["-if", index_file])
-                    except Exception as e:
-                        self.log_message(f"Index file error, skipping: {e}")
-                
-                env = os.environ.copy()
-                env['PYTHONPATH'] = project_dir
-                env['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
-                env['rmvpe_root'] = os.path.join(
-                    self.model_dir if os.path.exists(os.path.join(self.model_dir, 'rmvpe.pt')) 
-                    else os.path.join(project_dir, 'model_dir')
-                )
-                # Conda環境変数をクリア
-                env.pop('CONDA_DEFAULT_ENV', None)
-                env.pop('CONDA_PREFIX', None)
-                env.pop('CONDA_PYTHON_EXE', None)
-                env.pop('CONDA_EXE', None)
-                env.pop('CONDA_PROMPT_MODIFIER', None)
-                env.pop('_CE_CONDA', None)
-                env.pop('_CE_M', None)
-                
-                self.update_progress(2, 100, "前処理完了")
-                
-                # 4-6. RVC推論の実行
-                self._run_rvc_with_progress(cmd_array, env, project_dir)
-                
-                # 7. 出力保存
-                self.update_progress(6, 0, "変換結果を保存中...")
-                time.sleep(0.5)
-                self.update_progress(6, 100, "保存完了")
-                
-                self.root.after(0, lambda: self.conversion_complete())
-                time.sleep(1.5)
+            # 🚨 環境非依存の第一条件: 直接インポート方式を常に使用
+            # PyInstallerバイナリでのワーカープロセス実行は根本的制約があるため直接実行に統一
+            is_pyinstaller = getattr(sys, 'frozen', False)
+            self.log_message(f"PyInstaller検出: {is_pyinstaller}")
+            if is_pyinstaller:
+                self.log_message("完全スタンドアロン環境で直接インポート方式実行")
             else:
-                raise RuntimeError("Poetry not found. Please install Poetry first.")
+                self.log_message("開発環境で直接インポート方式実行")
+            
+            # 4-6. RVC推論を直接インポート方式で実行（環境非依存）
+            self.log_message("直接インポート方式でRVC実行...")
+            self._run_rvc_direct(index_file, project_dir)
+            
+            # 7. 出力保存
+            self.update_progress(6, 0, "変換結果を保存中...")
+            time.sleep(0.5)
+            self.update_progress(6, 100, "保存完了")
+            
+            self.root.after(0, lambda: self.conversion_complete())
+            time.sleep(1.5)
                     
         except Exception as e:
             # エラーメッセージを直接キャプチャ
             error_msg = str(e)
+            self.log_message(f"=== 変換処理で例外発生 ===: {error_msg}", "ERROR")
+            import traceback
+            self.log_message(f"完全スタックトレース: {traceback.format_exc()}", "ERROR")
             self.root.after(0, lambda: self.conversion_error(error_msg))
 
 
@@ -2062,6 +1934,429 @@ class DarkModeGUI:
             self.update_progress(5, 100, "後処理完了")
         elif current_stage == 5:
             self.update_progress(5, 100, "後処理完了")
+
+    def _run_rvc_direct(self, index_file, project_dir):
+        """PyInstaller環境でRVCを直接実行（subprocessを使わない）"""
+        try:
+            self.log_message("=== _run_rvc_direct関数内部に入りました ===")
+            self.log_message(f"index_file: {index_file}")
+            self.log_message(f"project_dir: {project_dir}")
+            
+            # ステージ3: 特徴抽出を開始
+            self.update_progress(3, 0, "音声の特徴を抽出中...")
+            self.log_message("ステージ3: 特徴抽出を開始")
+            
+            # 環境変数設定（現在のプロセス内）
+            os.environ['PYTHONPATH'] = project_dir
+            os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+            os.environ['rmvpe_root'] = os.path.join(
+                self.model_dir if os.path.exists(os.path.join(self.model_dir, 'rmvpe.pt')) 
+                else os.path.join(project_dir, 'model_dir')
+            )
+            
+            # PyInstaller環境でのモジュールパス設定
+            if getattr(sys, 'frozen', False):
+                # PyInstallerでパッケージ化されている場合
+                if hasattr(sys, '_MEIPASS'):
+                    # --onefile モード
+                    bundle_dir = sys._MEIPASS
+                else:
+                    # --onedir モード
+                    bundle_dir = os.path.dirname(os.path.abspath(sys.executable))
+                
+                self.log_message(f"PyInstaller環境検出: bundle_dir = {bundle_dir}")
+                
+                # アプリケーションバンドル内のリソースディレクトリ
+                if sys.platform == "darwin":
+                    # macOSアプリケーションバンドル
+                    app_dir = os.path.dirname(os.path.dirname(bundle_dir))  # .app ディレクトリ
+                    resource_dir = os.path.join(app_dir, 'Contents', 'Resources')  # Contentsを含める
+                    self.log_message(f"macOS App Bundle: app_dir = {app_dir}")
+                    self.log_message(f"macOS App Bundle: resource_dir = {resource_dir}")
+                    
+                    if os.path.exists(resource_dir):
+                        # PYTHONPATHにリソースディレクトリを追加
+                        pythonpath = os.environ.get('PYTHONPATH', '')
+                        if resource_dir not in pythonpath:
+                            os.environ['PYTHONPATH'] = f"{resource_dir}:{pythonpath}" if pythonpath else resource_dir
+                            self.log_message(f"PyInstaller環境: PYTHONPATHに追加 - {resource_dir}")
+                        
+                        # sys.pathにもリソースディレクトリを追加
+                        if resource_dir not in sys.path:
+                            sys.path.insert(0, resource_dir)
+                            self.log_message(f"PyInstaller環境: sys.pathにResourcesディレクトリを追加 - {resource_dir}")
+                    
+                    # rvcモジュールの存在確認
+                    rvc_path = os.path.join(resource_dir, 'rvc')
+                    self.log_message(f"RVCモジュール存在確認: {rvc_path} -> {os.path.exists(rvc_path)}")
+                    if os.path.exists(rvc_path):
+                        rvc_wrapper_path = os.path.join(rvc_path, 'wrapper')
+                        rvc_cli_path = os.path.join(rvc_wrapper_path, 'cli')
+                        rvc_handler_path = os.path.join(rvc_cli_path, 'handler')
+                        infer_path = os.path.join(rvc_handler_path, 'infer.py')
+                        self.log_message(f"  - wrapper: {os.path.exists(rvc_wrapper_path)}")
+                        self.log_message(f"  - cli: {os.path.exists(rvc_cli_path)}")
+                        self.log_message(f"  - handler: {os.path.exists(rvc_handler_path)}")
+                        self.log_message(f"  - infer.py: {os.path.exists(infer_path)}")
+                
+                # sys.pathにも追加（現在のプロセス用）
+                if bundle_dir not in sys.path:
+                    sys.path.insert(0, bundle_dir)
+                    self.log_message(f"PyInstaller環境: sys.pathに追加 - {bundle_dir}")
+                
+                # 現在のsys.pathを表示
+                self.log_message("現在のsys.path:")
+                for i, path in enumerate(sys.path[:5]):  # 最初の5つだけ表示
+                    self.log_message(f"  [{i}] {path}")
+            
+            # 直接RVCモジュールをインポートして実行（環境非依存の第一条件）
+            self.log_message("直接インポート方式でRVC実行を開始...")
+            
+            try:
+                # まずtorchを明示的にインポートして初期化
+                self.log_message("PyTorchを初期化中...")
+                import torch
+                self.log_message(f"PyTorch version: {torch.__version__}")
+                self.log_message(f"PyTorch _C module: {hasattr(torch, '_C')}")
+                
+                # MPS（Apple Silicon）設定
+                if torch.backends.mps.is_available():
+                    self.log_message("MPS (Apple Silicon) が利用可能です")
+                    device = torch.device("mps")
+                else:
+                    self.log_message("CPU モードで実行します")
+                    device = torch.device("cpu")
+                
+                # RVCモジュールをインポート
+                self.log_message("RVCモジュールをインポート中...")
+                from rvc.modules.vc.modules import VC
+                from rvc.configs.config import Config
+                import soundfile as sf
+                from pathlib import Path
+                
+                self.log_message("RVCモジュールのインポート成功")
+                self.update_progress(3, 50, "RVCモジュール読み込み完了")
+                
+                # Config作成
+                self.log_message("Config作成中...")
+                config = Config()
+                self.log_message("Config作成成功")
+                
+                # VC インスタンス作成
+                self.log_message("VCインスタンス作成中...")
+                vc = VC(config)
+                self.log_message("VCインスタンス作成成功")
+                
+                # モデルのロード
+                self.log_message(f"モデルをロード中: {self.model_info['file']}")
+                vc.get_vc(
+                    self.model_info["file"],
+                    cli_index_file_path=Path(index_file) if index_file and os.path.exists(index_file) else None
+                )
+                self.log_message("モデルロード成功")
+                
+                self.update_progress(3, 100, "特徴抽出準備完了")
+                
+                # ステージ4: モデル推論
+                self.update_progress(4, 0, "AIモデルで音声を変換中...")
+                
+                # インデックスファイルの検証
+                use_index_file = None
+                if index_file and os.path.exists(index_file):
+                    try:
+                        with open(index_file, 'rb') as f:
+                            header = f.read(8)
+                        if not header.startswith(b'\x93NUM'):
+                            use_index_file = Path(index_file)
+                            self.log_message(f"インデックスファイルを使用: {index_file}")
+                        else:
+                            self.log_message(f"無効なインデックスファイルをスキップ: {index_file}")
+                    except Exception as e:
+                        self.log_message(f"インデックスファイルエラー、スキップ: {e}")
+                
+                # 推論実行
+                self.log_message("RVC推論開始...")
+                self.log_message(f"  入力: {self.input_var.get()}")
+                self.log_message(f"  出力: {self.output_file_path}")
+                self.log_message(f"  ピッチ: {self.pitch_var.get()}")
+                self.log_message(f"  F0メソッド: {self.f0_method_var.get()}")
+                
+                # Hubertモデルのパス
+                hubert_path = Path(os.path.join(project_dir, "model_dir", "hubert_base.pt"))
+                if not os.path.exists(hubert_path):
+                    # 別の場所を探す
+                    alt_hubert_path = Path(os.path.join(self.model_dir, "hubert_base.pt"))
+                    if os.path.exists(alt_hubert_path):
+                        hubert_path = alt_hubert_path
+                
+                self.log_message(f"Hubertモデルパス: {hubert_path}")
+                
+                # 出力ディレクトリの確認と作成
+                output_dir = os.path.dirname(self.output_file_path)
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir, exist_ok=True)
+                    self.log_message(f"出力ディレクトリを作成: {output_dir}")
+                
+                # 推論実行
+                tgt_sr, audio_opt, times = vc.vc_inference(
+                    sid=0,
+                    input_audio_path=Path(self.input_var.get()),
+                    f0_up_key=self.pitch_var.get(),
+                    f0_method=self.f0_method_var.get(),
+                    f0_file=None,
+                    index_rate=self.index_rate_var.get(),
+                    filter_radius=self.filter_radius_var.get(),
+                    resample_sr_cli=0,
+                    rms_mix_rate=self.rms_mix_rate_var.get(),
+                    protect=self.protect_var.get(),
+                    hubert_path_cli=hubert_path
+                )
+                
+                self.log_message("RVC推論完了")
+                self.log_message(f"出力サンプリングレート: {tgt_sr}")
+                self.log_message(f"音声データ形状: {audio_opt.shape if audio_opt is not None else 'None'}")
+                
+                # 音声データの保存
+                if audio_opt is not None and audio_opt.ndim > 0 and audio_opt.size > 0:
+                    self.log_message(f"音声データを保存中: {self.output_file_path}")
+                    sf.write(self.output_file_path, audio_opt, tgt_sr)
+                    
+                    # ファイルサイズ確認
+                    if os.path.exists(self.output_file_path):
+                        file_size = os.path.getsize(self.output_file_path)
+                        self.log_message(f"出力ファイル作成成功: {self.output_file_path} (サイズ: {file_size} bytes)")
+                    else:
+                        self.log_message(f"警告: 出力ファイルが見つかりません: {self.output_file_path}")
+                else:
+                    self.log_message("エラー: 音声データが空または無効です", "ERROR")
+                    raise ValueError("音声データが空または無効です")
+                
+                self.update_progress(4, 100, "音声変換完了")
+                
+                # ステージ5: 後処理
+                self.update_progress(5, 0, "音質の最適化を実行中...")
+                self.update_progress(5, 100, "後処理完了")
+                
+                self.log_message("RVC inference completed successfully")
+                
+            except ImportError as e:
+                # インポートエラーの場合のフォールバック処理
+                self.log_message(f"RVCモジュールのインポートエラー: {str(e)}", "ERROR")
+                self.log_message("モジュールパスを再確認してください", "ERROR")
+                import traceback
+                self.log_message(f"詳細: {traceback.format_exc()}", "ERROR")
+                raise
+            except Exception as e:
+                self.log_message(f"RVC実行エラー: {str(e)}", "ERROR")
+                import traceback
+                self.log_message(f"詳細: {traceback.format_exc()}", "ERROR")
+                raise
+            
+        except Exception as e:
+            error_msg = f"Direct RVC execution failed: {str(e)}"
+            self.log_message(error_msg, "ERROR")
+            import traceback
+            self.log_message(f"詳細スタックトレース: {traceback.format_exc()}", "ERROR")
+            # エラーでも完了扱いにして継続
+            self.log_message("RVC inference completed with errors")
+
+    def _run_rvc_worker(self, index_file, hubert_path, env):
+        """ワーカープロセスでRVC実行（完全スタンドアロン版）"""
+        try:
+            self.log_message("=== スタンドアロン ワーカープロセス実行開始 ===")
+            
+            # ステージ3: 特徴抽出を開始
+            self.update_progress(3, 0, "音声の特徴を抽出中...")
+            
+            # ワーカー用引数を準備
+            worker_args = {
+                'modelpath': self.model_info["file"],
+                'inputpath': self.input_var.get(),
+                'outputpath': self.output_file_path,
+                'f0upkey': self.pitch_var.get(),
+                'f0method': self.f0_method_var.get(),
+                'indexrate': self.index_rate_var.get(),
+                'filterradius': self.filter_radius_var.get(),
+                'protect': self.protect_var.get(),
+                'rmsmixrate': self.rms_mix_rate_var.get(),
+                'hubertModelPath': hubert_path
+            }
+            
+            # インデックスファイルがある場合追加
+            if index_file and os.path.exists(index_file):
+                try:
+                    # ファイルの先頭バイトをチェックしてfaissフォーマットか確認
+                    with open(index_file, 'rb') as f:
+                        header = f.read(8)
+                    # faissファイルでない場合はスキップ
+                    if not header.startswith(b'\x93NUM'):
+                        worker_args['indexfile'] = index_file
+                        self.log_message(f"Using index file: {index_file}")
+                    else:
+                        self.log_message(f"Skipping invalid index file: {index_file}")
+                except Exception as e:
+                    self.log_message(f"Index file error, skipping: {e}")
+            
+            self.log_message(f"Worker args: {worker_args}")
+            
+            # PyInstallerバンドル内のワーカーを探す
+            worker_script_candidates = []
+            
+            # Resourcesディレクトリを最優先（macOSアプリバンドル）
+            app_contents_dirs = [
+                os.path.join(os.path.dirname(sys.executable), '..', 'Resources'),  # 標準的な場所
+                os.path.join(os.path.dirname(sys.executable), '..', '..', 'Resources'),  # 深い階層の場合
+                os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'Resources'),  # 別パターン
+            ]
+            
+            for resources_dir in app_contents_dirs:
+                normalized_dir = os.path.normpath(resources_dir)
+                if os.path.exists(normalized_dir):
+                    candidate_path = os.path.join(normalized_dir, "rvc_worker.py")
+                    if os.path.exists(candidate_path):
+                        worker_script_candidates.append(candidate_path)
+                        break  # 最初に見つかったResourcesディレクトリを使用
+            
+            # PyInstallerバンドル内を二番目の優先度
+            if hasattr(sys, '_MEIPASS'):
+                worker_script_candidates.append(os.path.join(sys._MEIPASS, "rvc_worker.py"))
+            
+            worker_script = None
+            for candidate in worker_script_candidates:
+                if os.path.exists(candidate):
+                    # シンボリックリンクの場合は実際のファイルパスを取得
+                    if os.path.islink(candidate):
+                        real_path = os.path.realpath(candidate)
+                        if os.path.exists(real_path):
+                            worker_script = real_path
+                            self.log_message(f"ワーカースクリプト発見(シンボリックリンク解決): {worker_script}")
+                            break
+                    else:
+                        worker_script = candidate
+                        self.log_message(f"ワーカースクリプト発見: {worker_script}")
+                        break
+            
+            if not worker_script:
+                self.log_message(f"スタンドアロンアプリ内にワーカースクリプトが見つかりません: {worker_script_candidates}", "ERROR")
+                raise FileNotFoundError(f"Worker script not found in standalone app: {worker_script_candidates}")
+            
+            # ステージ4: 変換中
+            self.update_progress(4, 0, "AIモデルで音声を変換中...")
+            
+            # 引数をJSONで一時ファイルに保存
+            import json
+            args_json = json.dumps(worker_args)
+            self.log_message(f"Preparing args for worker: {args_json}")
+            
+            # 一時ファイルを作成してJSON引数を保存
+            temp_fd, temp_file = tempfile.mkstemp(suffix='.json', text=True)
+            try:
+                with os.fdopen(temp_fd, 'w') as f:
+                    f.write(args_json)
+                
+                # Python実行環境を特定（環境非依存でPyInstallerバンドル内完結）
+                # 🚨 重要: 環境非依存の第一条件に従い、常にsys.executableを使用
+                python_executable = sys.executable
+                if hasattr(sys, '_MEIPASS'):
+                    self.log_message(f"PyInstaller検出: True")
+                    self.log_message(f"完全スタンドアロン環境でワーカープロセス実行")
+                else:
+                    self.log_message(f"開発環境でワーカープロセス実行")
+                self.log_message(f"Python実行環境: {python_executable}")
+                self.log_message(f"ワーカープロセスでRVC実行...")
+                
+                # 一時ファイルパスをコマンドライン引数として追加
+                cmd = [python_executable, worker_script, temp_file]
+                self.log_message(f"Worker command: {cmd}")
+                
+                # プロセス実行（stdinを使用せず、一時ファイルを使用）
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    env=env
+                )
+                
+                # プロセス起動状況をログ
+                if process.poll() is None:
+                    self.log_message("ワーカープロセス正常起動、一時ファイルから引数を読み込み中...")
+                else:
+                    self.log_message(f"ワーカープロセス即座終了、リターンコード: {process.returncode}", "ERROR")
+                
+                # プログレス更新を並行実行
+                self.update_progress(4, 30, "音声変換実行中...")
+                
+                # タイムアウト付きでワーカープロセスを実行
+                start_time = time.time()
+                self.log_message(f"ワーカープロセス実行開始時刻: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+                try:
+                    stdout, stderr = process.communicate(timeout=10)  # 10秒のタイムアウト（stdinなし）
+                    end_time = time.time()
+                    execution_time = end_time - start_time
+                    self.log_message(f"ワーカープロセス実行完了時刻: {time.strftime('%H:%M:%S', time.localtime(end_time))}")
+                    self.log_message(f"ワーカープロセス実行時間: {execution_time:.2f}秒")
+                    if stderr:
+                        self.log_message(f"Worker stderr: {stderr}", "WARNING")
+                except subprocess.TimeoutExpired:
+                    end_time = time.time()
+                    execution_time = end_time - start_time
+                    self.log_message(f"ワーカープロセスがタイムアウトしました。実行時間: {execution_time:.2f}秒", "ERROR")
+                    self.log_message("プロセスを強制終了します...", "ERROR")
+                    process.kill()
+                    stdout, stderr = process.communicate()
+                    self.log_message(f"強制終了後の標準出力: {stdout}")
+                    if stderr:
+                        self.log_message(f"強制終了後のエラー出力: {stderr}")
+                    raise Exception("Worker process timed out after 10 seconds")
+            finally:
+                # 一時ファイルのクリーンアップ
+                try:
+                    os.remove(temp_file)
+                    self.log_message(f"一時ファイルを削除しました: {temp_file}")
+                except Exception as e:
+                    self.log_message(f"一時ファイル削除に失敗: {temp_file}, エラー: {e}", "WARNING")
+            
+            self.log_message(f"Worker process completed with return code: {process.returncode}")
+            self.log_message(f"Worker output: {stdout}")
+            
+            # ステージ5: 後処理
+            self.update_progress(5, 0, "音質の最適化を実行中...")
+            time.sleep(0.5)
+            self.update_progress(5, 100, "後処理完了")
+            
+            # 結果を確認
+            if process.returncode == 0:
+                # RESULTラインを探す
+                for line in stdout.split('\n'):
+                    if line.startswith('RESULT:'):
+                        result_json = line[7:]  # 'RESULT:'を除去
+                        result = json.loads(result_json)
+                        if result.get('success'):
+                            self.log_message("RVC inference completed successfully")
+                            # 出力ファイルの存在確認
+                            if os.path.exists(self.output_file_path):
+                                file_size = os.path.getsize(self.output_file_path)
+                                self.log_message(f"出力ファイル作成確認: {self.output_file_path} (サイズ: {file_size} bytes)")
+                            else:
+                                self.log_message(f"WARNING: 出力ファイルが見つかりません: {self.output_file_path}")
+                        else:
+                            error_msg = result.get('error', 'Unknown error')
+                            self.log_message(f"Worker error: {error_msg}", "ERROR")
+                            raise RuntimeError(f"Worker failed: {error_msg}")
+                        break
+                else:
+                    self.log_message("No RESULT line found in worker output", "WARNING")
+            else:
+                self.log_message(f"Worker process failed with return code: {process.returncode}", "ERROR")
+                raise RuntimeError(f"Worker process failed: {stdout}")
+                
+        except Exception as e:
+            error_msg = f"Worker RVC execution failed: {str(e)}"
+            self.log_message(error_msg, "ERROR")
+            import traceback
+            self.log_message(f"詳細スタックトレース: {traceback.format_exc()}", "ERROR")
+            raise
 
     def conversion_error(self, error_msg):
         """変換エラー時の処理"""

@@ -41,6 +41,67 @@
 
 このプロセスにより、プロジェクトのルールを継続的に改善していきます。
 
+## 🚨 最重要ルール - 環境非依存アプリの第一条件
+
+**絶対に忘れてはいけない基本方針:**
+> 環境非依存のアプリを作るという目標が第一条件です
+
+**環境非依存とは:**
+- Poetry環境に依存しない
+- システムPython(/opt/homebrew/bin/python3等)に依存しない
+- Homebrew等の外部パッケージマネージャに依存しない
+- 他のMacで追加インストール不要で動作する
+
+**禁止事項:**
+```python
+# ❌ 絶対禁止: システムPython依存
+bundle_python_candidates = [
+    '/opt/homebrew/bin/python3',  # ← これは環境依存
+    '/usr/bin/python3',           # ← これも環境依存
+    'python3',                    # ← PATH依存も環境依存
+]
+```
+
+**必須事項:**
+```python
+# ✅ 必須: PyInstallerバンドル内完結
+if hasattr(sys, '_MEIPASS'):
+    # バンドル内リソースのみ使用
+    bundle_python = sys.executable  # PyInstallerバイナリ
+```
+
+**重要な教訓:**
+- 一時的に動作してもシステム依存は根本的解決ではない
+- 真のスタンドアロンアプリはバンドル内で完結する
+- 環境非依存性を犠牲にした解決策は採用しない
+
+## 🚨 PyInstallerワーカープロセス問題の重要知見
+
+### 現在の問題状況
+**症状**: ワーカープロセスが「JSON引数送信中...」で無出力停止
+- スタンドアロンアプリでは音声変換処理が開始されない
+- ワーカープロセス自体は起動するがRVCモジュール実行に到達しない
+- Poetry環境では正常動作するがPyInstallerバンドル内では停止
+
+### 解決済み問題
+1. **stdin通信問題**: ファイルベース通信で解決
+2. **ワーカースクリプト探索**: Resources/rvc_worker.py発見で解決  
+3. **新ウィンドウ問題**: subprocess実行方法修正で解決
+4. **タイムアウト対策**: 10秒タイムアウトで迅速診断実現
+
+### 根本的課題: 環境非依存性
+**システムPython依存は環境非依存の基本方針に反する:**
+- `/opt/homebrew/bin/python3` は他Macで存在しない可能性
+- Poetry環境パスは完全にマシン固有
+- 真のスタンドアロンアプリはバンドル内で完結する必要
+
+### 必要な解決策の方向性
+1. **PyInstallerバンドル内Python実行**: sys.executableの実行可能性検証
+2. **直接importアプローチ**: ワーカープロセス廃止、GUI内でRVC直接実行
+3. **バンドル内環境整備**: 必要なライブラリとモジュールパスの完全設定
+
+**次のステップ**: 環境非依存の制約内でRVC実行を実現する方法の実装
+
 ## 🎯 RVC音声変換環境構築の重要知見
 
 ### 環境構築の必須要件
@@ -266,3 +327,63 @@ open VoiceConverter_universal.app
    - **完全性確認**: 出力ファイルの存在、サイズ、内容を多角的に検証
    - **環境非依存**: Poetry環境等に依存しない完全独立動作を実現
    - **再現性保証**: 同一エラーの再発防止と解決手法の標準化
+
+## 🚨 PyInstaller環境非依存アプリ実現の完全知見
+
+### ✅ 解決済み：直接インポート方式による環境非依存性の実現
+
+**重要な成果**: ワーカープロセス方式を完全廃止し、GUI内でのRVC直接実行を実現
+
+**実装内容:**
+```python
+# _run_rvc_direct関数による直接インポート方式
+def _run_rvc_direct(self, index_file, project_dir):
+    # PyTorchを明示的に初期化
+    import torch
+    # RVCモジュールを直接インポート
+    from rvc.modules.vc.modules import VC
+    from rvc.configs.config import Config
+    # GUI内で音声変換を直接実行
+```
+
+**解決した問題:**
+1. **新ウィンドウ問題**: sys.executableがGUIバイナリのため新しいウィンドウが立ち上がる問題を根本解決
+2. **環境依存問題**: システムPythonやPoetry環境への依存を完全排除
+3. **ワーカープロセス停止**: JSON引数送信後の無出力停止問題を回避
+
+### 🔧 PyTorchフック最適化による段階的エラー解決
+
+**解決済みエラー順序:**
+1. ✅ `numpy.core._multiarray_tests` → hooks/hook-numpy.py で明示追加
+2. ✅ `torch_shm_manager` → hooks/hook-torch.py でtorch/bin収集
+3. ✅ `torch._C` → collect_dynamic_libs('torch')とbinariesセクション追加
+4. 🔄 `torch.distributed.distributed_c10d` → excludedimportsから'torch.distributed'削除中
+
+**現在の解決策（進行中）:**
+```python
+# hooks/hook-torch.py の修正
+excludedimports = [
+    # 'torch.distributed',  # ← 削除：torch.nnが依存しているため
+    'torch.distributed.rpc',        # 重い実装のみ除外
+    'torch.distributed.pipeline',
+    'torch.distributed.optim',
+    'torch.distributed.elastic',
+    'torch.distributed.fsdp',
+]
+```
+
+### 🎯 環境非依存の第一条件（堅持済み）
+
+**絶対原則**: 
+- ✅ subprocess方式を完全廃止
+- ✅ PyInstallerバンドル内で完結
+- ✅ Poetry/システムPython依存なし
+- ✅ 他のMacで追加インストール不要
+
+**技術的実装:**
+- 直接インポート方式による完全環境非依存性
+- PyInstallerフック最適化による必要モジュール確実収集
+- ランタイム環境変数設定（CUDA無効化等）
+
+### 次のステップ
+現在のtorch.distributedエラー解決により、完全な環境非依存スタンドアロンアプリが完成予定
