@@ -169,6 +169,14 @@ cython_debug/
 
 # Project specific
 model_dir/
+# ただし、model_dir構造は管理対象とする
+!model_dir/
+!model_dir/.gitkeep
+# 大きなモデルファイルのみ除外
+model_dir/*.pt
+model_dir/*.pth
+model_dir/*.onnx
+model_dir/*.bin
 *.wav
 *.mp3
 *.backup
@@ -202,9 +210,7 @@ dist_*/
 .nuitka_cache/
 *.onefile-build/
 
-# App bundles and packages  
-*.app
-*.dmg
+# App bundles and packages (重複除去済み)
 *.pkg
 
 # macOS specific build artifacts
@@ -222,3 +228,9 @@ rvc_pyqt_app_optimized.py
 rvc_pyqt_optimized.py
 python_embed/
 x86_64_env/
+
+# ユニバーサルバイナリビルド出力
+universal_build/
+# ただし、ディレクトリ構造は管理
+!universal_build/
+!universal_build/.gitkeep
