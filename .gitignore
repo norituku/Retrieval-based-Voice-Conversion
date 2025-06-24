@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+# PyInstallerビルド出力（大きなアプリファイル）
 downloads/
 eggs/
 .eggs/
@@ -198,8 +199,7 @@ test_output.*
 
 # Build artifacts
 *.dmg
-# ただし、以下の最終成果DMGは除外しない
-!VoiceConverter-Universal-Fixed.dmg
+# 最終成果DMGも容量が大きいため除外
 *.app/
 Voice Converter Simple.app/
 
@@ -229,8 +229,10 @@ rvc_pyqt_optimized.py
 python_embed/
 x86_64_env/
 
-# ユニバーサルバイナリビルド出力
+# ユニバーサルバイナリビルド出力（大きなアプリファイル）
 universal_build/
-# ただし、ディレクトリ構造は管理
+# ディレクトリ構造のみ管理
 !universal_build/
 !universal_build/.gitkeep
+# ビルド済みアプリは除外
+universal_build/*.app/
