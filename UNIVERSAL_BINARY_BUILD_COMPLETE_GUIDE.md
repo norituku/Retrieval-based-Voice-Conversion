@@ -1,201 +1,214 @@
-# 🚀 RVC Voice Converter ユニバーサルバイナリ版 完全ビルドガイド
+# 🌍 ユニバーサルバイナリ版 完全ビルドガイド
 
-このドキュメントは、Poetry依存を完全に排除した環境非依存のユニバーサルバイナリ版DMGを0から作成するための完全ガイドです。
+## 📋 概要
 
-## 📋 必要なファイル一覧
+このガイドでは、RVC Voice ConverterのユニバーサルバイナリDMGを0から作成する手順を詳細に説明します。
 
-### 1. コアアプリケーションファイル
-- **`gui_dark_mode.py`** - メインGUIアプリケーション（直接インポート方式実装済み）
-- **`rvc_config.py`** - RVC設定ファイル
-- **`audio_processor_lite.py`** - 音声処理モジュール
-- **`rvc/`** - RVCコアモジュールディレクトリ全体
-- **`model_dir/`** - モデルファイルディレクトリ
+## 🔧 前提環境
 
-### 2. PyInstallerビルド設定
-- **`rvc_minimal.spec`** ⭐ - メインのPyInstallerスペックファイル
-  - フック設定、バイナリ収集、除外モジュール定義
-  - torch._C問題の解決策実装済み
-  - fairseq/pdb問題の解決策実装済み
+### 必須要件
+- **OS**: macOS (Apple Silicon推奨)
+- **Python**: 3.11.x（厳密にこのバージョンが必要）
+- **Poetry**: 最新版
+- **Xcode Command Line Tools**: インストール済み
 
-### 3. PyInstallerフック
-- **`hooks/runtime_hook.py`** - ランタイム環境設定
-  - MPS無効化、環境変数設定、ダミーpdb提供
-- **`hooks/hook-torch.py`** - PyTorchモジュール収集
-- **`hooks/hook-numpy.py`** - NumPy依存関係収集
-- **`hooks/hook-librosa.py`** - librosa依存関係収集
-- **`hooks/hook-fairseq.py`** - fairseq依存関係収集
-- **`hooks/hook-soundfile.py`** - soundfile依存関係収集
-- **`hooks/hook-cffi.py`** - CFFI依存関係収集
-
-### 4. ビルドスクリプト
-- **`fix_codesign.sh`** ⭐ - arm64アプリのコード署名修復
-- **`create_universal_binary.sh`** ⭐ - ユニバーサルバイナリ作成
-- **`fix_codesign_universal.sh`** ⭐ - ユニバーサルアプリのコード署名修復
-
-### 5. DMG作成スクリプト
-- **`create_fixed_universal_dmg.py`** ⭐ - 環境非依存DMG作成（cp -pRP使用）
-
-### 6. Poetry依存関係
-- **`pyproject.toml`** - プロジェクト依存関係定義
-- **`poetry.lock`** - 依存関係のロックファイル
-
-### 7. アプリリソース
-- **`app_icons/`** - アプリケーションアイコン
-  - `icon.icns` - macOS用アイコン
-- **`Info_plist_template.txt`** - Info.plistテンプレート（Rosetta2対応設定含む）
-
-## 🛠️ ビルド環境の準備
-
-### 前提条件
-- macOS 12.0以降（Apple Silicon推奨）
-- Python 3.11（必須、3.12以降はfairseqで問題発生）
-- Poetry インストール済み
-- Xcode Command Line Tools インストール済み
-
-### 環境構築手順
-
+### 確認コマンド
 ```bash
-# 1. リポジトリクローン
-git clone <repository_url>
-cd Retrieval-based-Voice-Conversion
+python3.11 --version  # Python 3.11.x
+poetry --version       # Poetry確認
+xcode-select --install # 必要に応じて
+```
 
-# 2. Python 3.11環境の設定
+## 📁 必要ファイル一覧
+
+### ビルドスクリプト（5個）
+- `create_fixed_universal_dmg.py` - DMG作成
+- `create_universal_binary.sh` - ユニバーサルバイナリ作成
+- `fix_codesign.sh` - arm64版署名修復
+- `fix_codesign_universal.sh` - ユニバーサル版署名修復
+- `rvc_worker.py` - PyInstaller要件
+
+### 設定ファイル（5個）
+- `rvc_minimal.spec` - PyInstaller設定
+- `gui_dark_mode.py` - メインGUIアプリ
+- `rvc_config.py` - RVC設定
+- `pyproject.toml` - Poetry設定
+- `poetry.lock` - 依存関係ロック
+
+### 必須ディレクトリ（4個）
+- `rvc/` - メインライブラリ
+- `model_dir/` - モデル格納（構造のみ）
+- `hooks/` - PyInstallerフック
+- `app_icons/` - アプリアイコン
+
+## 🚀 ステップ別ビルド手順
+
+### Step 1: Poetry環境準備
+```bash
+# Python 3.11環境を強制設定
 poetry env use python3.11
 
-# 3. 依存関係インストール
+# 依存関係インストール（約5-10分）
 poetry install
 
-# 4. モデルファイルの配置
-# model_dir/ に必要なモデルファイルを配置
+# 環境パス確認（後で使用）
+poetry env info --path
+# 出力例: /Users/username/Library/Caches/pypoetry/virtualenvs/rvc-xxxxx-py3.11
 ```
 
-## 📦 ビルド手順
-
-### Step 1: PyInstallerでarm64アプリをビルド
-
+### Step 2: 環境確認
 ```bash
-# Poetry環境のPython直接パスを使用（重要！）
-/Users/norikene_satoshi/Library/Caches/pypoetry/virtualenvs/rvc-WP0SRWIz-py3.11/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
+# Python版本確認
+poetry run python --version
 
-# ビルド時間: 約2-3分
-# 出力: dist/VoiceConverter.app (約2.4GB)
+# 主要依存関係確認
+poetry run python -c "import torch; print(f'PyTorch: {torch.__version__}'); import fairseq; print('fairseq: OK')"
 ```
 
-### Step 2: コード署名修復
-
+### Step 3: PyInstaller arm64ビルド
 ```bash
-# ad-hoc署名を適用してGatekeeper問題を解決
+# Poetry環境Python直接パスでビルド（重要！）
+$(poetry env info --path)/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
+```
+
+### Step 4: コード署名修復
+```bash
+# arm64版の署名修復
 ./fix_codesign.sh
-
-# 検証
-codesign --verify --deep --verbose dist/VoiceConverter.app
 ```
 
-### Step 3: ユニバーサルバイナリ作成
-
+### Step 5: ユニバーサルバイナリ作成
 ```bash
-# arm64版をユニバーサル版に変換（Rosetta2対応）
+# Rosetta2対応版作成
 ./create_universal_binary.sh
-
-# 出力:
-# - universal_build/VoiceConverter_arm64.app (arm64専用)
-# - universal_build/VoiceConverter_universal.app (Rosetta2対応)
 ```
 
-### Step 4: ユニバーサルアプリの署名修復
-
+### Step 6: ユニバーサル版署名修復
 ```bash
-cd universal_build
-../fix_codesign_universal.sh
-cd ..
+# ユニバーサル版の署名修復
+./fix_codesign_universal.sh
 ```
 
-### Step 5: 配布用DMG作成
-
+### Step 7: DMG作成
 ```bash
-# cp -pRPを使用してバイナリ破損を防止
+# 最終DMG作成
+python3 create_fixed_universal_dmg.py
+```
+
+## ✅ 成功時の出力
+
+### 最終成果物
+- `VoiceConverter-Universal-Fixed.dmg` (約2.7GB)
+- `universal_build/VoiceConverter_universal.app` (Rosetta2対応)
+- `universal_build/VoiceConverter_arm64.app` (arm64専用)
+
+### 動作確認
+```bash
+# DMGマウント確認
+open VoiceConverter-Universal-Fixed.dmg
+
+# アプリ直接起動テスト
+open universal_build/VoiceConverter_universal.app
+```
+
+## 🚨 トラブルシューティング
+
+### よくあるエラーと解決方法
+
+#### 1. PyTorchライブラリエラー
+```
+Failed to load dynlib/dll libtorch_global_deps.dylib
+```
+**解決**: `rvc_minimal.spec`でtorch/libを明示的に追加済み
+
+#### 2. コード署名エラー
+```
+CODESIGNING 2 Invalid Page
+```
+**解決**: `fix_codesign.sh`で自動修復
+
+#### 3. Poetry not foundエラー
+```
+Poetry not found. Please install Poetry first.
+```
+**解決**: Poetry環境直接パスでビルドすることで回避
+
+#### 4. ファイル不足エラー
+```
+ERROR: Unable to find 'rvc_worker.py'
+```
+**解決**: 必要ファイルを復元して再ビルド
+
+### 詳細診断
+```bash
+# アプリの直接実行でエラー確認
+./dist/VoiceConverter.app/Contents/MacOS/VoiceConverter
+
+# 署名確認
+codesign -vv dist/VoiceConverter.app
+
+# アーキテクチャ確認
+file universal_build/VoiceConverter_universal.app/Contents/MacOS/VoiceConverter
+```
+
+## 🎯 パフォーマンス最適化
+
+### ビルド時間短縮
+- **SSD使用**: 高速ストレージでビルド
+- **メモリ**: 16GB以上推奨
+- **並列処理**: `--parallel`オプション利用
+
+### 容量最適化
+- **不要モジュール除外**: specファイルでexcludes設定
+- **圧縮無効**: 安定性優先でnoarchive=True
+
+## 📊 技術仕様
+
+### アーキテクチャサポート
+- **arm64**: Apple Silicon Mac（最高性能）
+- **Rosetta2**: Intel Mac互換（翻訳動作）
+
+### 対応OS
+- **最小**: macOS 10.15 (Catalina)
+- **推奨**: macOS 12.0 (Monterey) 以降
+
+### 依存関係
+- **PyTorch**: 2.1.x（2.6以降は非対応）
+- **Python**: 3.11.x（3.12以降は非対応）
+- **fairseq**: Git版必須
+
+## 🔄 継続的ビルド
+
+### 自動化スクリプト
+```bash
+#!/bin/bash
+# build_universal.sh - ワンライナー自動ビルド
+
+set -e
+echo "🚀 ユニバーサルバイナリ自動ビルド開始"
+
+poetry install
+$(poetry env info --path)/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
+./fix_codesign.sh
+./create_universal_binary.sh
+./fix_codesign_universal.sh
 python3 create_fixed_universal_dmg.py
 
-# 出力: VoiceConverter-Universal-Fixed.dmg (約2.7GB)
+echo "✅ ビルド完了: VoiceConverter-Universal-Fixed.dmg"
 ```
 
-## ✅ 動作確認
+### CI/CD統合
+- **GitHub Actions**: macOS runnerでビルド
+- **成果物保存**: DMGを自動アップロード
+- **テスト自動化**: 起動確認とバイナリ検証
 
-### DMGテスト
-```bash
-# DMGマウント
-hdiutil attach VoiceConverter-Universal-Fixed.dmg
+## 📚 関連資料
 
-# アプリをApplicationsにコピー
-cp -pRP "/Volumes/Voice Converter Universal/VoiceConverter.app" /Applications/
-
-# DMGアンマウント
-hdiutil detach "/Volumes/Voice Converter Universal"
-
-# アプリ起動
-open /Applications/VoiceConverter.app
-```
-
-### 確認項目
-- [ ] アプリが起動する
-- [ ] "Voice Converter Ready" が表示される
-- [ ] モデルが正しくロードされる
-- [ ] 音声変換が正常に動作する
-- [ ] Poetryエラーが出ない
-
-## 🔧 トラブルシューティング
-
-### 問題1: Poetry not found エラー
-**原因**: 古いバージョンのgui_dark_mode.pyを使用している
-**解決**: 最新のコードで再ビルド
-
-### 問題2: CODESIGNING 2 Invalid Page
-**原因**: PyInstallerのstrip処理による署名破損
-**解決**: fix_codesign.shを実行
-
-### 問題3: アプリが起動しない（DMGから）
-**原因**: dittoコマンドによるバイナリ破損
-**解決**: create_fixed_universal_dmg.py（cp -pRP使用）を使用
-
-### 問題4: torch._C not found
-**原因**: PyTorchのC拡張モジュール収集漏れ
-**解決**: rvc_minimal.specのbinaries設定確認
-
-## 📝 重要な技術的詳細
-
-### 環境非依存性の実現
-1. **subprocess方式の廃止**: GUI内でRVCを直接インポート
-2. **Poetry環境の排除**: PyInstallerバンドル内で完結
-3. **システムPython非依存**: 外部Python不要
-
-### コード署名戦略
-1. **個別ライブラリ署名**: すべての.so/.dylibに署名
-2. **深層署名**: --deep --forceで全体に適用
-3. **Gatekeeper対応**: spctl --addで初回起動許可
-
-### DMG作成の注意点
-1. **cp -pRP必須**: 権限とシンボリックリンク保持
-2. **ditto禁止**: バイナリ破損の原因
-3. **圧縮設定**: zlib-level=9で最適化
-
-## 🎯 最終チェックリスト
-
-- [ ] Python 3.11を使用している
-- [ ] Poetry環境が正しく設定されている
-- [ ] すべての必要ファイルが存在する
-- [ ] PyInstallerビルドが成功する
-- [ ] コード署名が有効である
-- [ ] DMGが正常に作成される
-- [ ] Applications配置後も動作する
-- [ ] Intel Mac（Rosetta2）でも動作確認済み
-
-## 📚 関連ドキュメント
-
-- `CLAUDE.md` - プロジェクト全体の知見管理
-- `.claude/rvc-pyinstaller-progress.md` - PyInstaller問題解決の詳細履歴
-- `MINIMAL_BUILD_README.md` - 最小構成ビルドの説明
-- `DMG_CREATION_GUIDE.md` - DMG作成の詳細ガイド
+- `UNIVERSAL_BINARY_QUICKSTART.md` - 5分クイックスタート
+- `CLAUDE.md` - プロジェクト知見管理
+- `rvc_minimal.spec` - PyInstaller詳細設定
 
 ---
-最終更新: 2025年6月24日
-作成者: Claude AI Assistant with 則兼智志
+**作成日**: 2025年6月24日  
+**バージョン**: 1.0  
+**対象**: RVC Voice Converter ユニバーサルバイナリ版

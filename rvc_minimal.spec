@@ -15,7 +15,6 @@ datas = [
     ('rvc', 'rvc'),
     ('model_dir', 'model_dir'),
     ('rvc_worker.py', '.'),
-    ('test_rvc_direct.py', '.'),
 ]
 
 # PyTorchライブラリを含める

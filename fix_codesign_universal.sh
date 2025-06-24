@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-APP_PATH="VoiceConverter_universal.app"
+APP_PATH="universal_build/VoiceConverter_universal.app"
 
 if [ ! -d "$APP_PATH" ]; then
     echo -e "${RED}エラー: $APP_PATH が見つかりません${NC}"

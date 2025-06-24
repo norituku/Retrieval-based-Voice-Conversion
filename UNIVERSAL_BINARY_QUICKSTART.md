@@ -41,7 +41,7 @@ $(poetry env info --path)/bin/pyinstaller --clean --noconfirm rvc_minimal.spec
 ./create_universal_binary.sh
 
 # ユニバーサル版の署名修復
-cd universal_build && ../fix_codesign_universal.sh && cd ..
+./fix_codesign_universal.sh
 ```
 
 ### 5️⃣ DMG作成（約1分）
@@ -73,10 +73,39 @@ poetry install && \
 $(poetry env info --path)/bin/pyinstaller --clean --noconfirm rvc_minimal.spec && \
 ./fix_codesign.sh && \
 ./create_universal_binary.sh && \
-cd universal_build && ../fix_codesign_universal.sh && cd .. && \
+./fix_codesign_universal.sh && \
 python3 create_fixed_universal_dmg.py && \
 echo "✅ 完成: VoiceConverter-Universal-Fixed.dmg"
 ```
+
+## 📁 必要なファイル（完全最小構成）
+
+🧹 **大規模整理完了！** ユニバーサルバイナリビルドに必要なファイルは以下のみです：
+
+### スクリプトファイル（5個）
+- `create_fixed_universal_dmg.py` - 環境非依存DMG作成
+- `create_universal_binary.sh` - ユニバーサルバイナリ作成  
+- `fix_codesign.sh` - arm64署名修復
+- `fix_codesign_universal.sh` - ユニバーサル署名修復
+- `rvc_worker.py` - PyInstaller要件
+
+### 設定ファイル（5個）
+- `rvc_minimal.spec` - PyInstaller設定
+- `gui_dark_mode.py` - メインGUIアプリ
+- `rvc_config.py` - RVC設定
+- `pyproject.toml` - Poetry設定
+- `poetry.lock` - 依存関係ロック
+
+### 必須ディレクトリ（4個）
+- `rvc/` - メインライブラリ
+- `model_dir/` - モデル格納（構造のみ）
+- `hooks/` - PyInstallerフック
+- `app_icons/` - アプリアイコン
+
+### ドキュメント（3個）
+- `CLAUDE.md` - プロジェクト設定・知見管理
+- `UNIVERSAL_BINARY_BUILD_COMPLETE_GUIDE.md` - 詳細ガイド
+- `UNIVERSAL_BINARY_QUICKSTART.md` - クイックスタート（本ファイル）
 
 ## 🆘 困ったときは
 
