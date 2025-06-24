@@ -31,6 +31,9 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# ただし、RVCプロジェクトの重要なspecファイルは除外しない
+!rvc_minimal.spec
+!rvc_*.spec
 
 # Installer logs
 pip-log.txt
@@ -174,8 +177,8 @@ model_dir/
 test_*.py
 *_test.py
 debug_*.py
-fix_*.py
-create_*.py
+# fix_*.py  # ← DMG作成に必要なため除外解除
+# create_*.py  # ← DMG作成に必要なため除外解除
 apply_*.py
 check_*.py
 integrate_*.py
@@ -187,6 +190,8 @@ test_output.*
 
 # Build artifacts
 *.dmg
+# ただし、以下の最終成果DMGは除外しない
+!VoiceConverter-Universal-Fixed.dmg
 *.app/
 Voice Converter Simple.app/
 

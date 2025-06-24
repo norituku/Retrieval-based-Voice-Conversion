@@ -196,7 +196,14 @@ subprocess.run(["cp", "-pRP", str(app_path), str(app_dest)], check=True)
 2. **コード署名問題**: fix_codesign_universal.shで完全署名修復
 3. **DMG作成問題**: create_fixed_universal_dmg.pyで環境非依存実現
 
-**重要成果:** `VoiceConverter-Universal-Fixed.dmg` (2.5GB) - 完全動作確認済み
+**重要成果:** `VoiceConverter-Universal-Fixed.dmg` (2.7GB) - Poetry依存問題解決済み
+
+**Git管理対象ファイル:**
+- `create_fixed_universal_dmg.py`: cp -pRP使用の正しいDMG作成
+- `fix_codesign_universal.sh`: ユニバーサルアプリ署名修復
+- `create_universal_binary.sh`: ユニバーサルバイナリ作成
+- `rvc_minimal.spec`: PyInstallerビルド設定
+- 各種spec/create/fixファイル: .gitignore除外解除済み
 
 ### 🌍 ユニバーサルバイナリ（Rosetta2対応版）作成方法
 
