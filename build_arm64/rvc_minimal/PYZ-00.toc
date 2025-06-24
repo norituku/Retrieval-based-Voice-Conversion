@@ -1,0 +1,2 @@
+('/Users/norikene_satoshi/Retrieval-based-Voice-Conversion/build_arm64/rvc_minimal/PYZ-00.pyz',
+ [])

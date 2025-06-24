@@ -2114,13 +2114,18 @@ class DarkModeGUI:
             self.log_message("直接インポート方式でRVC実行を開始...")
             
             try:
-                # MPS（Apple Silicon）設定
-                if torch.backends.mps.is_available():
-                    self.log_message("MPS (Apple Silicon) が利用可能です")
-                    device = torch.device("mps")
-                else:
-                    self.log_message("CPU モードで実行します")
+                # PyInstaller環境では常にCPUを使用（MPSクラッシュ回避）
+                if hasattr(sys, '_MEIPASS'):
+                    self.log_message("PyInstaller環境検出 - CPU モードを強制使用")
                     device = torch.device("cpu")
+                else:
+                    # 開発環境でのみMPS使用可能
+                    if torch.backends.mps.is_available():
+                        self.log_message("MPS (Apple Silicon) が利用可能です")
+                        device = torch.device("mps")
+                    else:
+                        self.log_message("CPU モードで実行します")
+                        device = torch.device("cpu")
                 
                 # fairseq help変数パッチ（PyInstaller環境での互換性確保）
                 self.log_message("fairseq互換性パッチ適用中...")

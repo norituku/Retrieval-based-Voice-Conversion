@@ -288,10 +288,16 @@ class EnhancedPipeline(Pipeline):
         t0 = ttime()
         
         # MPS環境でのweight_norm問題を回避：HubertモデルをCPUで実行
-        original_device = next(model.parameters()).device
-        cpu_fallback_needed = False
+        # PyInstaller環境では常にCPUフォールバックを使用
+        import sys
+        if hasattr(sys, '_MEIPASS'):
+            cpu_fallback_needed = True
+            original_device = torch.device('cpu')
+        else:
+            original_device = next(model.parameters()).device
+            cpu_fallback_needed = False
         
-        if str(original_device).startswith('mps'):
+        if str(original_device).startswith('mps') and not hasattr(sys, '_MEIPASS'):
             try:
                 with torch.no_grad():
                     logits = model.extract_features(**inputs)

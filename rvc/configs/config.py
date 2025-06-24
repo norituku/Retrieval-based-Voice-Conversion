@@ -97,6 +97,9 @@ class Config:
 
     @staticmethod
     def has_mps() -> bool:
+        # PyInstaller環境では常にFalseを返す（MPSクラッシュ回避）
+        if hasattr(sys, '_MEIPASS'):
+            return False
         return torch.backends.mps.is_available() and not torch.zeros(1).to(
             torch.device("mps")
         )

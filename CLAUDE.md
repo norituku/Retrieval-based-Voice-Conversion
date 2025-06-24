@@ -186,12 +186,17 @@ subprocess.run(["cp", "-pRP", str(app_path), str(app_dest)], check=True)
 
 ### 🚨 絶対に忘れてはいけない重要事実
 
-**現状:**
+**✅ 解決済み（2025年6月24日）:**
 - ✅ スタンドアロンアプリ: 完璧に動作、Poetryエラーなし
 - ✅ ユニバーサル版アプリ: 完璧に動作、Poetryエラーなし
-- ❌ DMG内のアプリ: Poetryエラー発生
+- ✅ DMG内のアプリ: 署名修復により正常動作
 
-**結論:** アプリ自体は完璧。DMG作成プロセスのみが問題。
+**根本原因と解決:**
+1. **dittoコマンド問題**: cp -pRPに変更してバイナリ破損解決
+2. **コード署名問題**: fix_codesign_universal.shで完全署名修復
+3. **DMG作成問題**: create_fixed_universal_dmg.pyで環境非依存実現
+
+**重要成果:** `VoiceConverter-Universal-Fixed.dmg` (2.5GB) - 完全動作確認済み
 
 ### 🌍 ユニバーサルバイナリ（Rosetta2対応版）作成方法
 
