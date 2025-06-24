@@ -29,13 +29,19 @@ model_dir/*.pt
 model_dir/*.pth
 model_dir/**/*.pt
 model_dir/**/*.pth
+model_dir/**/*.index
+model_dir/**/*.json
+model_dir/**/*.png
+model_dir/**/*.jpg
+model_dir/**/*.wav
+model_dir/**/*.mp3
 dist/
 build*/
 *.dmg
 *.app
 
-# Git keeps
+# Git keeps - only keep directory structure
 !model_dir/
 !model_dir/4/
 !model_dir/5/
-!.gitkeep
+!model_dir/*/.gitkeep
