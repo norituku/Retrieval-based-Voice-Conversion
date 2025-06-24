@@ -1,0 +1,7 @@
+This directory contains RVC model files.
+
+Download models and place them in the appropriate subdirectories:
+- hubert_base.pt
+- rmvpe.pt
+- model_dir/4/ (for v4 models)
+- model_dir/5/ (for v5 models)

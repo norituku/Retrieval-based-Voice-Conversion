@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# RVC specific
+model_dir/*.pt
+model_dir/*.pth
+model_dir/**/*.pt
+model_dir/**/*.pth
+dist/
+build*/
+*.dmg
+*.app
+
+# Git keeps
+!model_dir/
+!model_dir/4/
+!model_dir/5/
+!.gitkeep
