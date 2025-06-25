@@ -151,6 +151,9 @@ exe = EXE(
     console=False,
     target_arch='arm64',
     codesign_identity='-',
+    # 無限ループ防止
+    argv_emulation=False,
+    disable_windowed_traceback=False,
 )
 
 coll = COLLECT(
@@ -174,6 +177,8 @@ app = BUNDLE(
             'PATH': '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
         },
         'NSHighResolutionCapable': True,
+        'LSMultipleInstancesProhibited': True,  # 複数インスタンス禁止
+        'LSUIElement': False,  # ドックに表示
     },
 )
 # === PyInstaller自体のPython環境を最大活用 ===

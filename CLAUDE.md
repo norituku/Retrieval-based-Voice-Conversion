@@ -230,6 +230,90 @@ open VoiceConverter_universal.app
 - **ビルド手順**: Poetry環境Python直接パス実行 → `./fix_codesign.sh`
 - **最終成果**: 997MB の完全動作arm64アプリ（Python環境不要）
 
+### 🔄 PyInstallerアプリの無限ループ起動問題と解決方法
+
+**問題の症状:**
+- アプリ起動時に同じプロセスが無限に生成される
+- runtime_hookが繰り返し実行される
+- macOSで特に発生しやすい
+
+**根本原因:**
+- multiprocessingモジュールのfork方式による再帰的プロセス生成
+- PyInstallerのfreeze_support()が適切に呼ばれていない
+
+**解決方法:**
+1. **gui_dark_mode.pyの修正**
+   ```python
+   # ファイル冒頭に追加
+   import multiprocessing
+   if sys.platform == 'darwin' and hasattr(sys, 'frozen'):
+       multiprocessing.set_start_method('spawn', force=True)
+   
+   # main関数の最初に追加
+   def main():
+       if hasattr(sys, 'frozen'):
+           multiprocessing.freeze_support()
+   
+   # if __name__ == "__main__":部分も修正
+   if __name__ == "__main__":
+       if sys.platform == 'darwin' and hasattr(sys, 'frozen'):
+           multiprocessing.freeze_support()
+       main()
+   ```
+
+2. **runtime_hook.pyの修正**
+   ```python
+   # 重複実行防止を最初に追加
+   if os.environ.get('RVC_RUNTIME_HOOK_LOADED'):
+       sys.exit(0)
+   os.environ['RVC_RUNTIME_HOOK_LOADED'] = '1'
+   ```
+
+3. **rvc_minimal.specの修正**
+   ```python
+   # Info.plistに追加
+   'LSMultipleInstancesProhibited': True,  # 複数インスタンス禁止
+   'LSUIElement': False,  # ドックに表示
+   ```
+
+**検証済み効果:**
+- ✅ 無限ループ完全解決
+- ✅ 単一プロセスとして正常起動
+- ✅ Intel Mac/Apple Silicon両対応
+
+### 🛡️ macOSマルウェア警告への対処法
+
+**警告メッセージ:**
+「Appleは、"VoiceConverter"にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした。」
+
+**警告の原因:**
+- Apple公証（Notarization）を受けていない
+- 年間$99のApple Developer Program未加入
+
+**対処法（3つの方法）:**
+
+1. **システム設定から許可（最も簡単）**
+   - アプリ起動 → 警告表示 → キャンセル
+   - システム設定 → プライバシーとセキュリティ
+   - 「このまま開く」をクリック → パスワード入力
+   - 再度「開く」を選択
+
+2. **付属スクリプト使用**
+   ```bash
+   ./remove_malware_warning.sh
+   ```
+
+3. **手動コマンド**
+   ```bash
+   sudo xattr -rd com.apple.quarantine /Applications/VoiceConverter.app
+   sudo spctl --add /Applications/VoiceConverter.app
+   ```
+
+**配布時の対応:**
+- DMGに`MALWARE_WARNING_SOLUTION.md`を同梱
+- `remove_malware_warning.sh`スクリプトを同梱
+- 初回起動時の警告は標準的であることを説明
+
 ## 🚀 Ultra Think技術 - 問題解決ベストプラクティス
 
 ### 1. 段階的問題解決アプローチ

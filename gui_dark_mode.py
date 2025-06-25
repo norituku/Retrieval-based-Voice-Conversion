@@ -15,7 +15,11 @@ import math
 import time
 from pathlib import Path
 from datetime import datetime
-import time
+import multiprocessing
+
+# PyInstaller無限ループ防止
+if sys.platform == 'darwin' and hasattr(sys, 'frozen'):
+    multiprocessing.set_start_method('spawn', force=True)
 
 # RVC設定をインポート（存在する場合）
 try:
@@ -1828,7 +1832,8 @@ class DarkModeGUI:
                 self.log_message("開発環境で直接インポート方式実行")
             
             # 4-6. RVC推論を直接インポート方式で実行（環境非依存）
-            self.log_message("直接インポート方式でRVC実行...")
+            # 🚨 緊急修正: subprocess方式を完全禁止、直接インポート方式のみ使用
+            self.log_message("🛡️ 直接インポート方式でRVC実行（subprocess方式禁止）...")
             self._run_rvc_direct(index_file, project_dir)
             
             # 7. 出力保存
@@ -1850,90 +1855,11 @@ class DarkModeGUI:
 
 
     def _run_rvc_with_progress(self, cmd_array, env, project_dir):
-        """RVC推論をプログレス追跡しながら実行（内蔵プログレスバー使用）"""
+        """🚨 緊急修正: subprocess方式を完全禁止し、直接実行方式にリダイレクト"""
+        self.log_message("🛑 _run_rvc_with_progress は無効化されました。直接実行方式を使用します。")
         
-        # ステージ3: 特徴抽出を開始
-        self.update_progress(3, 0, "音声の特徴を抽出中...")
-        
-        process = subprocess.Popen(
-            cmd_array,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-            env=env,
-            cwd=project_dir
-        )
-        
-        current_stage = 3  # 特徴抽出ステージ
-        line_count = 0
-        total_lines_estimate = 100  # 推定行数
-        
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                line = line.strip()
-                if line:
-                    self.log_message(line)
-                    line_count += 1
-                    
-                    # 行数に基づく進捗更新
-                    stage_progress = min((line_count / total_lines_estimate) * 100, 100)
-                    
-                    # キーワードによる進捗とステージの推定
-                    if "Loading" in line or "loading" in line:
-                        self.update_progress(current_stage, 30, "モデルを読み込み中...")
-                    elif "Extract" in line or "extract" in line:
-                        if current_stage == 3:
-                            self.update_progress(3, 70, "特徴抽出を実行中...")
-                    elif "Process" in line or "process" in line:
-                        if current_stage < 4:
-                            # ステージ4: モデル推論に移行
-                            self.update_progress(3, 100, "特徴抽出完了")
-                            current_stage = 4
-                            self.update_progress(4, 0, "AIモデルで音声を変換中...")
-                        self.update_progress(4, 50, "音声変換を処理中...")
-                    elif "Generate" in line or "generate" in line:
-                        self.update_progress(4, 80, "音声を生成中...")
-                    elif "Save" in line or "save" in line or "Write" in line or "write" in line:
-                        if current_stage < 5:
-                            # ステージ5: 後処理に移行
-                            self.update_progress(4, 100, "音声変換完了")
-                            current_stage = 5
-                            self.update_progress(5, 0, "音質の最適化を実行中...")
-                        self.update_progress(5, 90, "最適化処理中...")
-                    
-                    # 進捗の詳細表示
-                    if line_count % 5 == 0:  # 5行ごとに更新
-                        if current_stage == 3:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(3, progress, f"特徴抽出中... ({line_count}行処理)")
-                        elif current_stage == 4:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(4, progress, f"音声変換中... ({line_count}行処理)")
-                        elif current_stage == 5:
-                            progress = min(stage_progress, 90)
-                            self.update_progress(5, progress, f"後処理中... ({line_count}行処理)")
-                        
-        process.wait()
-        
-        # エラーチェック
-        if process.returncode != 0:
-            # エラー詳細を取得
-            error_msg = f"RVC inference failed with return code: {process.returncode}"
-            self.log_message(error_msg, "ERROR")
-            raise RuntimeError(error_msg)
-        
-        # 処理完了を確認
-        if current_stage == 3:
-            self.update_progress(3, 100, "特徴抽出完了")
-            self.update_progress(4, 100, "音声変換完了")
-            self.update_progress(5, 100, "後処理完了")
-        elif current_stage == 4:
-            self.update_progress(4, 100, "音声変換完了")
-            self.update_progress(5, 100, "後処理完了")
-        elif current_stage == 5:
-            self.update_progress(5, 100, "後処理完了")
+        # 直接実行方式にリダイレクト
+        return self._run_rvc_direct(None, project_dir)
 
     def _run_rvc_direct(self, index_file, project_dir):
         """PyInstaller環境でRVCを直接実行（subprocessを使わない）"""
@@ -2287,202 +2213,12 @@ class DarkModeGUI:
             self.log_message("RVC inference completed with errors")
 
     def _run_rvc_worker(self, index_file, hubert_path, env):
-        """ワーカープロセスでRVC実行（完全スタンドアロン版）"""
-        try:
-            self.log_message("=== スタンドアロン ワーカープロセス実行開始 ===")
-            
-            # ステージ3: 特徴抽出を開始
-            self.update_progress(3, 0, "音声の特徴を抽出中...")
-            
-            # ワーカー用引数を準備
-            worker_args = {
-                'modelpath': self.model_info["file"],
-                'inputpath': self.input_var.get(),
-                'outputpath': self.output_file_path,
-                'f0upkey': self.pitch_var.get(),
-                'f0method': self.f0_method_var.get(),
-                'indexrate': self.index_rate_var.get(),
-                'filterradius': self.filter_radius_var.get(),
-                'protect': self.protect_var.get(),
-                'rmsmixrate': self.rms_mix_rate_var.get(),
-                'hubertModelPath': hubert_path
-            }
-            
-            # インデックスファイルがある場合追加
-            if index_file and os.path.exists(index_file):
-                try:
-                    # ファイルの先頭バイトをチェックしてfaissフォーマットか確認
-                    with open(index_file, 'rb') as f:
-                        header = f.read(8)
-                    # faissファイルでない場合はスキップ
-                    if not header.startswith(b'\x93NUM'):
-                        worker_args['indexfile'] = index_file
-                        self.log_message(f"Using index file: {index_file}")
-                    else:
-                        self.log_message(f"Skipping invalid index file: {index_file}")
-                except Exception as e:
-                    self.log_message(f"Index file error, skipping: {e}")
-            
-            self.log_message(f"Worker args: {worker_args}")
-            
-            # PyInstallerバンドル内のワーカーを探す
-            worker_script_candidates = []
-            
-            # Resourcesディレクトリを最優先（macOSアプリバンドル）
-            app_contents_dirs = [
-                os.path.join(os.path.dirname(sys.executable), '..', 'Resources'),  # 標準的な場所
-                os.path.join(os.path.dirname(sys.executable), '..', '..', 'Resources'),  # 深い階層の場合
-                os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'Resources'),  # 別パターン
-            ]
-            
-            for resources_dir in app_contents_dirs:
-                normalized_dir = os.path.normpath(resources_dir)
-                if os.path.exists(normalized_dir):
-                    candidate_path = os.path.join(normalized_dir, "rvc_worker.py")
-                    if os.path.exists(candidate_path):
-                        worker_script_candidates.append(candidate_path)
-                        break  # 最初に見つかったResourcesディレクトリを使用
-            
-            # PyInstallerバンドル内を二番目の優先度
-            if hasattr(sys, '_MEIPASS'):
-                worker_script_candidates.append(os.path.join(sys._MEIPASS, "rvc_worker.py"))
-            
-            worker_script = None
-            for candidate in worker_script_candidates:
-                if os.path.exists(candidate):
-                    # シンボリックリンクの場合は実際のファイルパスを取得
-                    if os.path.islink(candidate):
-                        real_path = os.path.realpath(candidate)
-                        if os.path.exists(real_path):
-                            worker_script = real_path
-                            self.log_message(f"ワーカースクリプト発見(シンボリックリンク解決): {worker_script}")
-                            break
-                    else:
-                        worker_script = candidate
-                        self.log_message(f"ワーカースクリプト発見: {worker_script}")
-                        break
-            
-            if not worker_script:
-                self.log_message(f"スタンドアロンアプリ内にワーカースクリプトが見つかりません: {worker_script_candidates}", "ERROR")
-                raise FileNotFoundError(f"Worker script not found in standalone app: {worker_script_candidates}")
-            
-            # ステージ4: 変換中
-            self.update_progress(4, 0, "AIモデルで音声を変換中...")
-            
-            # 引数をJSONで一時ファイルに保存
-            import json
-            args_json = json.dumps(worker_args)
-            self.log_message(f"Preparing args for worker: {args_json}")
-            
-            # 一時ファイルを作成してJSON引数を保存
-            temp_fd, temp_file = tempfile.mkstemp(suffix='.json', text=True)
-            try:
-                with os.fdopen(temp_fd, 'w') as f:
-                    f.write(args_json)
-                
-                # Python実行環境を特定（環境非依存でPyInstallerバンドル内完結）
-                # 🚨 重要: 環境非依存の第一条件に従い、常にsys.executableを使用
-                python_executable = sys.executable
-                if hasattr(sys, '_MEIPASS'):
-                    self.log_message(f"PyInstaller検出: True")
-                    self.log_message(f"完全スタンドアロン環境でワーカープロセス実行")
-                else:
-                    self.log_message(f"開発環境でワーカープロセス実行")
-                self.log_message(f"Python実行環境: {python_executable}")
-                self.log_message(f"ワーカープロセスでRVC実行...")
-                
-                # 一時ファイルパスをコマンドライン引数として追加
-                cmd = [python_executable, worker_script, temp_file]
-                self.log_message(f"Worker command: {cmd}")
-                
-                # プロセス実行（stdinを使用せず、一時ファイルを使用）
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    env=env
-                )
-                
-                # プロセス起動状況をログ
-                if process.poll() is None:
-                    self.log_message("ワーカープロセス正常起動、一時ファイルから引数を読み込み中...")
-                else:
-                    self.log_message(f"ワーカープロセス即座終了、リターンコード: {process.returncode}", "ERROR")
-                
-                # プログレス更新を並行実行
-                self.update_progress(4, 30, "音声変換実行中...")
-                
-                # タイムアウト付きでワーカープロセスを実行
-                start_time = time.time()
-                self.log_message(f"ワーカープロセス実行開始時刻: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
-                try:
-                    stdout, stderr = process.communicate(timeout=10)  # 10秒のタイムアウト（stdinなし）
-                    end_time = time.time()
-                    execution_time = end_time - start_time
-                    self.log_message(f"ワーカープロセス実行完了時刻: {time.strftime('%H:%M:%S', time.localtime(end_time))}")
-                    self.log_message(f"ワーカープロセス実行時間: {execution_time:.2f}秒")
-                    if stderr:
-                        self.log_message(f"Worker stderr: {stderr}", "WARNING")
-                except subprocess.TimeoutExpired:
-                    end_time = time.time()
-                    execution_time = end_time - start_time
-                    self.log_message(f"ワーカープロセスがタイムアウトしました。実行時間: {execution_time:.2f}秒", "ERROR")
-                    self.log_message("プロセスを強制終了します...", "ERROR")
-                    process.kill()
-                    stdout, stderr = process.communicate()
-                    self.log_message(f"強制終了後の標準出力: {stdout}")
-                    if stderr:
-                        self.log_message(f"強制終了後のエラー出力: {stderr}")
-                    raise Exception("Worker process timed out after 10 seconds")
-            finally:
-                # 一時ファイルのクリーンアップ
-                try:
-                    os.remove(temp_file)
-                    self.log_message(f"一時ファイルを削除しました: {temp_file}")
-                except Exception as e:
-                    self.log_message(f"一時ファイル削除に失敗: {temp_file}, エラー: {e}", "WARNING")
-            
-            self.log_message(f"Worker process completed with return code: {process.returncode}")
-            self.log_message(f"Worker output: {stdout}")
-            
-            # ステージ5: 後処理
-            self.update_progress(5, 0, "音質の最適化を実行中...")
-            time.sleep(0.5)
-            self.update_progress(5, 100, "後処理完了")
-            
-            # 結果を確認
-            if process.returncode == 0:
-                # RESULTラインを探す
-                for line in stdout.split('\n'):
-                    if line.startswith('RESULT:'):
-                        result_json = line[7:]  # 'RESULT:'を除去
-                        result = json.loads(result_json)
-                        if result.get('success'):
-                            self.log_message("RVC inference completed successfully")
-                            # 出力ファイルの存在確認
-                            if os.path.exists(self.output_file_path):
-                                file_size = os.path.getsize(self.output_file_path)
-                                self.log_message(f"出力ファイル作成確認: {self.output_file_path} (サイズ: {file_size} bytes)")
-                            else:
-                                self.log_message(f"WARNING: 出力ファイルが見つかりません: {self.output_file_path}")
-                        else:
-                            error_msg = result.get('error', 'Unknown error')
-                            self.log_message(f"Worker error: {error_msg}", "ERROR")
-                            raise RuntimeError(f"Worker failed: {error_msg}")
-                        break
-                else:
-                    self.log_message("No RESULT line found in worker output", "WARNING")
-            else:
-                self.log_message(f"Worker process failed with return code: {process.returncode}", "ERROR")
-                raise RuntimeError(f"Worker process failed: {stdout}")
-                
-        except Exception as e:
-            error_msg = f"Worker RVC execution failed: {str(e)}"
-            self.log_message(error_msg, "ERROR")
-            import traceback
-            self.log_message(f"詳細スタックトレース: {traceback.format_exc()}", "ERROR")
-            raise
+        """🚨 緊急修正: subprocess方式を完全禁止し、直接実行方式にリダイレクト"""
+        self.log_message("🛑 _run_rvc_worker は無効化されました。直接実行方式を使用します。")
+        
+        # 直接実行方式にリダイレクト
+        project_dir = self.base_dir
+        return self._run_rvc_direct(index_file, project_dir)
 
     def conversion_error(self, error_msg):
         """変換エラー時の処理"""
@@ -2590,10 +2326,17 @@ class DarkModeGUI:
 
 
 def main():
+    # PyInstaller環境での無限ループ防止
+    if hasattr(sys, 'frozen'):
+        multiprocessing.freeze_support()
+    
     root = tk.Tk()
     app = DarkModeGUI(root)
     root.mainloop()
 
 
 if __name__ == "__main__":
+    # PyInstallerで凍結されたアプリの場合
+    if sys.platform == 'darwin' and hasattr(sys, 'frozen'):
+        multiprocessing.freeze_support()
     main()
