@@ -45,3 +45,8 @@ build*/
 !model_dir/4/
 !model_dir/5/
 !model_dir/*/.gitkeep
+
+# Test files and backups
+model_dir/4/tire.index.numpy_backup
+model_dir/4/test_numpy.index
+model_dir/4/*_faiss_cache.index
