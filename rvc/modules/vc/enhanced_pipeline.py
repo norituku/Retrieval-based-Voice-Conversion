@@ -442,7 +442,7 @@ class EnhancedPipeline(Pipeline):
             return np.array([], dtype=np.int16)
         
         try:
-            # インデックスファイルの読み込み
+            # ユニバーサルインデックスファイルの読み込み（NumPy・FAISS両対応）
             if (
                 file_index
                 and file_index != ""
@@ -450,11 +450,17 @@ class EnhancedPipeline(Pipeline):
                 and index_rate != 0
             ):
                 try:
-                    index = faiss.read_index(file_index)
-                    big_npy = index.reconstruct_n(0, index.ntotal)
-                    logger.info(f"✅ Index file loaded: {file_index}, ntotal={index.ntotal}")
+                    from rvc.lib.index_utils import load_index_with_cache
+                    index, big_npy = load_index_with_cache(file_index)
+                    
+                    if index is not None and big_npy is not None:
+                        logger.info(f"✅ Index file loaded (universal): {file_index}, ntotal={index.ntotal}, format=auto-detected")
+                    else:
+                        logger.error(f"❌ Universal index loading failed: {file_index}")
+                        index = big_npy = None
+                        
                 except Exception as e:
-                    logger.error(f"❌ Index file loading failed: {e}")
+                    logger.error(f"❌ Universal index file loading failed: {e}")
                     traceback.print_exc()
                     index = big_npy = None
             else:

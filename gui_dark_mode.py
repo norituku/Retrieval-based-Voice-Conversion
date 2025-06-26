@@ -2112,17 +2112,18 @@ class DarkModeGUI:
                 # ステージ4: モデル推論
                 self.update_progress(4, 0, "AIモデルで音声を変換中...")
                 
-                # インデックスファイルの検証
+                # ユニバーサルインデックスファイルの検証（NumPy・FAISS両対応）
                 use_index_file = None
                 if index_file and os.path.exists(index_file):
                     try:
-                        with open(index_file, 'rb') as f:
-                            header = f.read(8)
-                        if not header.startswith(b'\x93NUM'):
+                        from rvc.lib.index_utils import detect_index_format
+                        format_type = detect_index_format(index_file)
+                        
+                        if format_type in ['numpy', 'faiss']:
                             use_index_file = Path(index_file)
-                            self.log_message(f"インデックスファイルを使用: {index_file}")
+                            self.log_message(f"インデックスファイルを使用 ({format_type}形式): {index_file}")
                         else:
-                            self.log_message(f"無効なインデックスファイルをスキップ: {index_file}")
+                            self.log_message(f"未対応のインデックスファイル形式、スキップ: {index_file}")
                     except Exception as e:
                         self.log_message(f"インデックスファイルエラー、スキップ: {e}")
                 

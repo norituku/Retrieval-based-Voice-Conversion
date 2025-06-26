@@ -477,9 +477,18 @@ class Pipeline(object):
             and index_rate != 0
         ):
             try:
-                index = faiss.read_index(file_index)
-                # big_npy = np.load(file_big_npy)
-                big_npy = index.reconstruct_n(0, index.ntotal)
+                # ユニバーサルインデックス読み込み（NumPy・FAISS両対応）
+                from rvc.lib.index_utils import load_index_with_cache
+                index, big_npy = load_index_with_cache(file_index)
+                
+                if index is None or big_npy is None:
+                    logger.warning(f"Universal index loading failed, attempting fallback: {file_index}")
+                    # フォールバック: 従来のFAISS読み込み
+                    index = faiss.read_index(file_index)
+                    big_npy = index.reconstruct_n(0, index.ntotal)
+                else:
+                    logger.info(f"Universal index loaded successfully: {file_index}, ntotal={index.ntotal}")
+                    
             except:
                 traceback.print_exc()
                 index = big_npy = None
